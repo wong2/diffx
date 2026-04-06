@@ -24,7 +24,7 @@ Common variations — use these when the context calls for it:
 diffx -- --staged          # Only staged changes
 diffx -- HEAD~3            # Last 3 commits
 diffx -- main..HEAD        # Current branch vs main
-diffx -p 8080             # Custom port (default: 3433)
+diffx -p 8080             # Custom port (default: random available port)
 ```
 
 Anything after `--` is passed directly to `git diff`, so any valid git diff arguments work.

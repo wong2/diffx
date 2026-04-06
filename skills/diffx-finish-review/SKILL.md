@@ -12,13 +12,13 @@ Fetch all review comments from the running diffx server, apply the requested cha
 
 ### 1. Fetch comments from the API
 
-The diffx server is running locally (default port 3433). Fetch all comments:
+The diffx server is running locally. Check the earlier conversation context for the port diffx reported on startup. Fetch all comments:
 
 ```bash
-curl -s http://localhost:3433/api/comments
+curl -s http://localhost:<port>/api/comments
 ```
 
-If port 3433 doesn't respond, check earlier conversation context for the actual port diffx reported on startup.
+Replace `<port>` with the port number diffx reported on startup (visible in the server log output).
 
 The response is a JSON array of comment objects:
 
@@ -47,7 +47,7 @@ For each comment with `"status": "open"`:
 4. After successfully applying the change, mark the comment as resolved:
 
 ```bash
-curl -s -X PUT http://localhost:3433/api/comments/<id> \
+curl -s -X PUT http://localhost:<port>/api/comments/<id> \
   -H "Content-Type: application/json" \
   -d '{"status": "resolved"}'
 ```
