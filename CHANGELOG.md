@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+
+### Minor Changes
+
+- 39340d9: add comment replies support
+
 ## 0.8.3
 
 ### Patch Changes
