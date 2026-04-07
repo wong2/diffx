@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.3
+
+### Patch Changes
+
+- 7e42d1b: Fix button hover state where background color collides with foreground text color
+
 ## 0.8.2
 
 ### Patch Changes
