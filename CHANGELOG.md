@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.2
+
+### Patch Changes
+
+- 129a23b: All internal `git diff` invocations now pass `--no-ext-diff --no-color`, so the frontend always receives a standard unified diff regardless of the user's global git configuration.
+
 ## 0.8.1
 
 ### Patch Changes
