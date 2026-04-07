@@ -74,20 +74,24 @@ export function getBranchName(): string {
   }
 }
 
+// Force standard unified diff regardless of user's git config
+// (e.g. diff.external = difftastic, color.ui = always).
+const DIFF_FLAGS = ['--no-ext-diff', '--no-color'] as const
+
 export function getCustomGitDiff(args: string[]): string {
-  return execFileSync('git', ['diff', ...args], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
+  return execFileSync('git', ['diff', ...DIFF_FLAGS, ...args], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
 }
 
 export function getGitDiff(options: { staged?: boolean; untracked?: boolean } = {}): string {
   const parts: string[] = []
 
   // unstaged changes (always included as the base)
-  const unstaged = execFileSync('git', ['diff'], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
+  const unstaged = execFileSync('git', ['diff', ...DIFF_FLAGS], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
   if (unstaged) parts.push(unstaged)
 
   // staged changes
   if (options.staged) {
-    const staged = execFileSync('git', ['diff', '--staged'], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
+    const staged = execFileSync('git', ['diff', ...DIFF_FLAGS, '--staged'], { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 })
     if (staged) parts.push(staged)
   }
 
