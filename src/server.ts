@@ -223,6 +223,7 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
 
 export function startServer(options: {
   port: number
+  host: string
   clientDir: string
   customDiffArgs?: string[]
 }): Promise<{ port: number }> {
@@ -232,7 +233,7 @@ export function startServer(options: {
     const server = serve({
       fetch: app.fetch,
       port: options.port,
-      hostname: '127.0.0.1',
+      hostname: options.host,
     }, (info) => {
       resolve({ port: info.port })
     })
