@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.10.0
+
+### Minor Changes
+
+- b76c8b6: Add comment status tracker in sidebar with open/replied/resolved status indicators and click-to-navigate via anchor links
+- 6c3d7db: Distinguish untracked files from added files with a separate FileQuestion icon
+
 ## 0.9.0
 
 ### Minor Changes
