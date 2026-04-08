@@ -41,9 +41,12 @@ Examples:
 
 - **Split / Unified view** — Toggle between side-by-side and inline diff
 - **Syntax highlighting** — Powered by Shiki with GitHub themes
-- **File tree** — Hierarchical file browser with search filter
+- **File tree** — Hierarchical file browser with search filter and file change-type icons
 - **Inline comments** — Click the `+` button on any line to add a review comment
+- **Comment replies** — AI agents can reply to comments via API, displayed with bot avatar in the UI
+- **Comment status tracker** — Sidebar widget showing open, replied, and resolved comment counts with click-to-navigate links
 - **Copy comments** — One-click copy all comments as structured XML for AI coding agents
+- **Image preview** — Side-by-side comparison for added, modified, and deleted images
 - **Viewed tracking** — Mark files as reviewed to track progress
 - **Staged / Untracked toggles** — Choose which changes to include
 - **Custom diff commands** — Pass any `git diff` arguments after `--`
