@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+### Minor Changes
+
+- 0a4f752: add `--host` flag to bind the server to a custom address (e.g. `0.0.0.0` for LAN access)
+
 ## 0.10.0
 
 ### Minor Changes
