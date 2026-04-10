@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { parsePatchFiles } from '@pierre/diffs'
 import type { FileDiffMetadata } from '@pierre/diffs'
 import type { ReviewComment } from '../types'
@@ -20,6 +20,17 @@ export function App() {
   const { comments, addComment, removeComment, copyAllComments } =
     useComments()
   const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) {
+        setSidebarOpen(false)
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
   const { viewedFiles, setViewed } = useViewed()
   const diffViewerRef = useRef<HTMLDivElement>(null)
 
@@ -140,20 +151,29 @@ export function App() {
         diffOptions={{ staged: settings.staged, untracked: settings.untracked }}
         defaultTabSize={settings.defaultTabSize}
         customMode={customMode}
+        sidebarOpen={sidebarOpen}
+        onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
         onDiffStyleChange={(style) => updateSettings({ diffStyle: style })}
         onDiffOptionsChange={(options) => updateSettings(options)}
         onDefaultTabSizeChange={(size) => updateSettings({ defaultTabSize: size })}
         onCopyComments={copyAllComments}
       />
       <div className="app-body">
-        <aside className="sidebar">
+        <div
+          className={`sidebar-overlay ${sidebarOpen ? 'sidebar-overlay-open' : ''}`}
+          onClick={() => setSidebarOpen(false)}
+        />
+        <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
           <FileTree
             files={files}
             activeFile={activeFile}
             commentCounts={commentCounts}
             viewedFiles={viewedFiles}
             untrackedFiles={untrackedSet}
-            onFileClick={handleFileClick}
+            onFileClick={(file) => {
+              handleFileClick(file)
+              setSidebarOpen(false)
+            }}
           />
           <CommentTracker comments={comments} />
         </aside>

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { GitBranch, Settings } from 'lucide-react'
+import { GitBranch, Settings, FolderTree } from 'lucide-react'
 import type { DiffOptions } from '../hooks/useDiff'
 
 interface ToolbarProps {
@@ -13,6 +13,8 @@ interface ToolbarProps {
   diffOptions: DiffOptions
   defaultTabSize: number
   customMode: boolean
+  sidebarOpen: boolean
+  onSidebarToggle: () => void
   onDiffStyleChange: (style: 'split' | 'unified') => void
   onDiffOptionsChange: (options: DiffOptions) => void
   onDefaultTabSizeChange: (size: number) => void
@@ -30,6 +32,8 @@ export function Toolbar({
   diffOptions,
   defaultTabSize,
   customMode,
+  sidebarOpen,
+  onSidebarToggle,
   onDiffStyleChange,
   onDiffOptionsChange,
   onDefaultTabSizeChange,
@@ -60,6 +64,14 @@ export function Toolbar({
   return (
     <div className="toolbar">
       <div className="toolbar-left">
+        <button
+          className="sidebar-toggle-btn"
+          onClick={onSidebarToggle}
+          title="Toggle sidebar"
+          aria-label="Toggle sidebar"
+        >
+          <FolderTree size={18} />
+        </button>
         <h1 className="toolbar-title">{repoName}</h1>
         {branch && (
           <span className="toolbar-branch">
