@@ -65,10 +65,12 @@ export function Toolbar({
     <div className="toolbar">
       <div className="toolbar-left">
         <button
-          className="sidebar-toggle-btn"
+          className={`sidebar-toggle-btn${sidebarOpen ? ' active' : ''}`}
           onClick={onSidebarToggle}
-          title="Toggle sidebar"
-          aria-label="Toggle sidebar"
+          title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
+          aria-expanded={sidebarOpen}
+          aria-pressed={sidebarOpen}
         >
           <FolderTree size={18} />
         </button>

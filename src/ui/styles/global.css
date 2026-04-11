@@ -970,6 +970,7 @@ body {
     display: none;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
     width: 32px;
     height: 32px;
     border: 1px solid var(--border);
@@ -989,7 +990,7 @@ body {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.4);
-    z-index: 150;
+    z-index: 90;
 }
 
 @media (max-width: 768px) {
@@ -1003,11 +1004,7 @@ body {
 
     .sidebar {
         position: fixed;
-        top: 41px;
         left: -320px;
-        width: 300px;
-        min-width: 300px;
-        height: calc(100vh - 41px);
         z-index: 200;
         transition: left 0.25s ease-in-out;
         box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);

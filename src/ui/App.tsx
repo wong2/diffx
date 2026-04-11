@@ -152,7 +152,7 @@ export function App() {
         defaultTabSize={settings.defaultTabSize}
         customMode={customMode}
         sidebarOpen={sidebarOpen}
-        onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+        onSidebarToggle={() => setSidebarOpen((open) => !open)}
         onDiffStyleChange={(style) => updateSettings({ diffStyle: style })}
         onDiffOptionsChange={(options) => updateSettings(options)}
         onDefaultTabSizeChange={(size) => updateSettings({ defaultTabSize: size })}
