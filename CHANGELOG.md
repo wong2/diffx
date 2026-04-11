@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0
+
+### Minor Changes
+
+- 93b20e5: Add collapsible sidebar with toggle button next to the file filter input
+
 ## 0.11.0
 
 ### Minor Changes
