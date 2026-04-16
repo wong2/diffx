@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.1
+
+### Patch Changes
+
+- 7779d85: add browser setting
+
 ## 0.12.0
 
 ### Minor Changes
