@@ -140,18 +140,20 @@ export function Toolbar({
               </div>
               <div className="settings-item settings-item-spaced">
                 <span>Browser</span>
-                <input
-                  type="text"
-                  className="settings-input"
-                  placeholder="e.g. google chrome"
+                <select
+                  className="settings-select"
                   value={browser || ''}
-                  onChange={(e) => onBrowserChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setSettingsOpen(false)
-                    }
+                  onChange={(e) => {
+                    onBrowserChange(e.target.value)
+                    setSettingsOpen(false)
                   }}
-                />
+                >
+                  <option value="">Default</option>
+                  <option value="chrome">Chrome</option>
+                  <option value="firefox">Firefox</option>
+                  <option value="edge">Edge</option>
+                  <option value="brave">Brave</option>
+                </select>
               </div>
             </div>
           )}

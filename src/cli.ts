@@ -77,7 +77,12 @@ if (!values['no-open']) {
   const openHost = host === '0.0.0.0' ? '127.0.0.1' : host
   const openUrl = `http://${openHost}:${actualPort}`
   const openModule = await import('open')
-  const options = settings.browser ? { app: { name: settings.browser } } : {}
+  let appName: string | readonly string[] | undefined
+  if (settings.browser) {
+    const apps = openModule.apps as Record<string, string | readonly string[]>
+    appName = apps[settings.browser] || settings.browser
+  }
+  const options = appName ? { app: { name: appName } } : {}
   openModule.default(openUrl, options)
 }
 
