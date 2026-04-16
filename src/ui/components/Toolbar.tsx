@@ -12,10 +12,12 @@ interface ToolbarProps {
   diffStyle: 'split' | 'unified'
   diffOptions: DiffOptions
   defaultTabSize: number
+  browser?: string
   customMode: boolean
   onDiffStyleChange: (style: 'split' | 'unified') => void
   onDiffOptionsChange: (options: DiffOptions) => void
   onDefaultTabSizeChange: (size: number) => void
+  onBrowserChange: (browser: string) => void
   onCopyComments: () => Promise<void>
 }
 
@@ -29,10 +31,12 @@ export function Toolbar({
   diffStyle,
   diffOptions,
   defaultTabSize,
+  browser,
   customMode,
   onDiffStyleChange,
   onDiffOptionsChange,
   onDefaultTabSizeChange,
+  onBrowserChange,
   onCopyComments,
 }: ToolbarProps) {
   const [copied, setCopied] = useState(false)
@@ -133,6 +137,21 @@ export function Toolbar({
                   <option value={4}>4</option>
                   <option value={8}>8</option>
                 </select>
+              </div>
+              <div className="settings-item settings-item-spaced">
+                <span>Browser</span>
+                <input
+                  type="text"
+                  className="settings-input"
+                  placeholder="e.g. google chrome"
+                  value={browser || ''}
+                  onChange={(e) => onBrowserChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setSettingsOpen(false)
+                    }
+                  }}
+                />
               </div>
             </div>
           )}

@@ -152,10 +152,12 @@ export function App() {
         diffStyle={settings.diffStyle}
         diffOptions={{ staged: settings.staged, untracked: settings.untracked }}
         defaultTabSize={settings.defaultTabSize}
+        browser={settings.browser}
         customMode={customMode}
         onDiffStyleChange={(style) => updateSettings({ diffStyle: style })}
         onDiffOptionsChange={(options) => updateSettings(options)}
         onDefaultTabSizeChange={(size) => updateSettings({ defaultTabSize: size })}
+        onBrowserChange={(browser) => updateSettings({ browser })}
         onCopyComments={copyAllComments}
       />
       <div className="app-body">

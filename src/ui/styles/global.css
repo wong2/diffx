@@ -206,14 +206,27 @@ body {
     cursor: pointer;
 }
 
-.settings-select {
+.settings-select,
+.settings-input {
     padding: 2px 4px;
     font-size: 12px;
     border: 1px solid var(--border);
     border-radius: 4px;
     background: var(--bg);
     color: var(--text);
+}
+
+.settings-select {
     cursor: pointer;
+}
+
+.settings-input {
+    width: 120px;
+    outline: none;
+}
+
+.settings-input:focus {
+    border-color: var(--accent);
 }
 
 .toolbar-toggle {

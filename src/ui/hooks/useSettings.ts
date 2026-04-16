@@ -5,6 +5,7 @@ export interface Settings {
   untracked: boolean
   diffStyle: 'split' | 'unified'
   defaultTabSize: number
+  browser?: string
 }
 
 const DEFAULTS: Settings = {

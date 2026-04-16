@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs'
 import getPort from 'get-port'
 import { isGitRepo } from './git.js'
 import { startServer } from './server.js'
+import { loadSettings } from './settings.js'
 
 const { values, positionals } = parseArgs({
   options: {
@@ -72,10 +73,12 @@ const localUrl = `http://${host}:${actualPort}`
 console.log(`diffx server running at ${localUrl}`)
 
 if (!values['no-open']) {
+  const settings = loadSettings()
   const openHost = host === '0.0.0.0' ? '127.0.0.1' : host
   const openUrl = `http://${openHost}:${actualPort}`
   const openModule = await import('open')
-  openModule.default(openUrl)
+  const options = settings.browser ? { app: { name: settings.browser } } : {}
+  openModule.default(openUrl, options)
 }
 
 process.on('SIGINT', () => {
