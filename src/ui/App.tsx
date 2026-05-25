@@ -27,7 +27,6 @@ export function App() {
       return false
     }
   })
-  const { viewedFiles, setViewed } = useViewed()
   const diffViewerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -67,6 +66,8 @@ export function App() {
       return []
     }
   }, [patch, binaryFiles])
+
+  const { viewedFiles, setViewed } = useViewed(files)
 
   const diffStats = useMemo(() => {
     if (!patch) return { additions: 0, deletions: 0 }

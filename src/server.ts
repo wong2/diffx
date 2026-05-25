@@ -82,7 +82,7 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
   const app = new Hono()
   const isCustomMode = !!customDiffArgs
   const store = commentStore ?? new InMemoryCommentStore()
-  const viewedFiles = new Set<string>()
+  const viewedFiles = new Map<string, string>()
 
   app.get('/api/diff', (c) => {
     let patch: string
@@ -131,13 +131,16 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
   })
 
   app.get('/api/viewed', (c) => {
-    return c.json([...viewedFiles])
+    return c.json(Object.fromEntries(viewedFiles))
   })
 
   app.put('/api/viewed', async (c) => {
-    const { filePath, viewed } = await c.req.json<{ filePath: string; viewed: boolean }>()
+    const { filePath, viewed, contentHash } = await c.req.json<{ filePath: string; viewed: boolean; contentHash?: string }>()
     if (viewed) {
-      viewedFiles.add(filePath)
+      if (typeof contentHash !== 'string' || contentHash.length === 0) {
+        return c.json({ error: 'non-empty contentHash required when marking viewed' }, 400)
+      }
+      viewedFiles.set(filePath, contentHash)
     } else {
       viewedFiles.delete(filePath)
     }
