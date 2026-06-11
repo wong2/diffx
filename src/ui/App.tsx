@@ -6,6 +6,7 @@ import { useDiff } from './hooks/useDiff'
 import { useComments } from './hooks/useComments'
 import { useSettings } from './hooks/useSettings'
 import { useViewed } from './hooks/useViewed'
+import { useFullDiffs, fileKey } from './hooks/useFullDiffs'
 import { Toolbar } from './components/Toolbar'
 import { DiffViewer } from './components/DiffViewer'
 import { FileTree } from './components/FileTree'
@@ -66,6 +67,12 @@ export function App() {
       return []
     }
   }, [patch, binaryFiles])
+
+  const fullFiles = useFullDiffs(patch, files, { staged: settings.staged, untracked: settings.untracked })
+  const displayFiles = useMemo(() => {
+    if (fullFiles.size === 0) return files
+    return files.map((f) => fullFiles.get(fileKey(f)) ?? f)
+  }, [files, fullFiles])
 
   const { viewedFiles, setViewed } = useViewed(files)
 
@@ -177,7 +184,7 @@ export function App() {
         </aside>
         <main className="main" ref={diffViewerRef}>
           <DiffViewer
-            files={files}
+            files={displayFiles}
             diffStyle={settings.diffStyle}
             tabSizeMap={tabSizeMap}
             defaultTabSize={settings.defaultTabSize}

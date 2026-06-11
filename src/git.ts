@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
-import { readFileSync } from 'node:fs'
+import { readFileSync, lstatSync, readlinkSync } from 'node:fs'
 import { isSafePath } from './path.js'
 import { parseSync as parseEditorConfig, type ProcessedFileConfig } from 'editorconfig'
 
@@ -42,6 +42,42 @@ export function getFileContent(filePath: string, version: 'old' | 'new'): Buffer
   // old version: try staged first, then HEAD
   try {
     return execFileSync('git', ['show', `HEAD:${filePath}`], { stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 })
+  } catch {
+    return null
+  }
+}
+
+const BLOB_OID_REGEX = /^[0-9a-f]{4,64}$/
+
+export function getBlobContent(oid: string): string | null {
+  if (!BLOB_OID_REGEX.test(oid) || /^0+$/.test(oid)) {
+    return null
+  }
+  try {
+    return execFileSync('git', ['cat-file', 'blob', oid], { encoding: 'utf-8', stdio: 'pipe', maxBuffer: 50 * 1024 * 1024 })
+  } catch {
+    return null
+  }
+}
+
+export function getWorktreeFileContent(filePath: string): string | null {
+  const root = getRepoRoot()
+  if (!isSafePath(filePath, root)) {
+    return null
+  }
+  const resolved = resolve(root, filePath)
+  try {
+    // Match git's notion of the worktree blob: for a symlink that is the
+    // target string, never the contents of the file it points at (which
+    // could be outside the repository).
+    const stats = lstatSync(resolved)
+    if (stats.isSymbolicLink()) {
+      return readlinkSync(resolved, 'utf-8')
+    }
+    if (!stats.isFile()) {
+      return null
+    }
+    return readFileSync(resolved, 'utf-8')
   } catch {
     return null
   }

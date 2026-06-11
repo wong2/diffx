@@ -39,6 +39,11 @@ export const FileDiffCard = memo(function FileDiffCard({
 
   const getLineContent = (side: AnnotationSide, lineNumber: number): string => {
     const lines = side === 'additions' ? fileDiff.additionLines : fileDiff.deletionLines
+    // Full (non-partial) diffs carry the entire file, so any line — including
+    // expanded context outside hunks — can be addressed directly.
+    if (!fileDiff.isPartial) {
+      return lines[lineNumber - 1] ?? ''
+    }
     const startKey = side === 'additions' ? 'additionStart' : 'deletionStart'
     const countKey = side === 'additions' ? 'additionCount' : 'deletionCount'
     const indexKey = side === 'additions' ? 'additionLineIndex' : 'deletionLineIndex'
@@ -86,6 +91,7 @@ export const FileDiffCard = memo(function FileDiffCard({
             fileDiff={fileDiff}
             options={{
               diffStyle,
+              expansionLineCount: 20,
               enableGutterUtility: true,
               theme: { dark: 'github-dark', light: 'github-light' },
               themeType: 'system',
