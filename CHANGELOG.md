@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.0
+
+### Minor Changes
+
+- 582a7d1: Add expand-context controls above and below each change region, revealing the next 20 unchanged lines per click (#26)
+
+### Patch Changes
+
+- 97335db: Fix the web UI failing to load on Windows. The static-file guard compared resolved paths against a hardcoded `/`, which never matches Windows' backslash paths, so every asset was rejected with a 403. Compare against the platform separator (`path.sep`) instead.
+
 ## 0.12.1
 
 ### Patch Changes
