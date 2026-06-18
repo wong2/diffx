@@ -299,21 +299,41 @@ body {
     min-height: 0;
 }
 
+.app-body > .react-resizable {
+    flex-shrink: 0;
+}
+
 .sidebar {
-    width: 300px;
-    min-width: 300px;
     height: 100%;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     border-right: 1px solid var(--border);
     background: var(--bg-secondary);
-    transition: width 0.2s ease, min-width 0.2s ease;
+    overflow: hidden;
+}
+
+.sidebar-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
 .sidebar-collapsed {
     width: 40px;
     min-width: 40px;
+}
+
+.sidebar-resize-handle {
+    width: 4px;
+    flex-shrink: 0;
+    background: transparent;
+    cursor: col-resize;
+}
+
+.sidebar-resize-handle:hover {
+    background: var(--border);
 }
 
 .sidebar-toggle {

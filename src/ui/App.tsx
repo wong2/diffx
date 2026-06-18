@@ -1,4 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
+import { Resizable } from 'react-resizable'
+import 'react-resizable/css/styles.css'
 import { parsePatchFiles } from '@pierre/diffs'
 import { Virtualizer } from '@pierre/diffs/react'
 import type { FileDiffMetadata } from '@pierre/diffs'
@@ -12,6 +14,21 @@ import { Toolbar } from './components/Toolbar'
 import { DiffViewer } from './components/DiffViewer'
 import { FileTree } from './components/FileTree'
 import { CommentTracker } from './components/CommentTracker'
+import { SidebarStorage } from './sidebarStorage'
+
+function useWindowSize({ factor }: { factor: number }) {
+  const compute = () => Math.round(window.innerWidth * factor)
+
+  const [size, setSize] = useState(compute)
+
+  useEffect(() => {
+    const handleResize = () => setSize(compute())
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [factor])
+
+  return size
+}
 
 export function App() {
   const { settings, loaded, updateSettings } = useSettings()
@@ -22,18 +39,20 @@ export function App() {
   const { comments, addComment, removeComment, copyAllComments } =
     useComments()
   const [activeFile, setActiveFile] = useState<string | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem('diffx-sidebar-collapsed') === 'true'
-    } catch {
-      return false
-    }
-  })
-  useEffect(() => {
-    try {
-      localStorage.setItem('diffx-sidebar-collapsed', String(sidebarCollapsed))
-    } catch {}
-  }, [sidebarCollapsed])
+  const [sidebar, setSidebar] = useState(() => SidebarStorage.load())
+  const maxSidebarWidth = useWindowSize({ factor: 0.5 })
+
+  const handleResize = useCallback((_e: React.SyntheticEvent, data: { size: { width: number } }) => {
+    setSidebar((prev) => prev.withSize(data.size.width))
+  }, [])
+
+  const handleResizeStop = useCallback((_e: React.SyntheticEvent, data: { size: { width: number } }) => {
+    setSidebar((prev) => prev.withSize(data.size.width).save())
+  }, [])
+
+  const handleToggleCollapse = useCallback(() => {
+    setSidebar((prev) => prev.withCollapsed(!prev.collapsed).save())
+  }, [])
 
   const untrackedSet = useMemo(() => new Set(untrackedFiles), [untrackedFiles])
 
@@ -43,7 +62,6 @@ export function App() {
       const parsed = parsePatchFiles(patch)
       const parsedFiles = parsed.flatMap((p) => p.files)
 
-      // Add synthetic entries for binary files not already in parsed output
       const existingNames = new Set(parsedFiles.map((f) => f.name))
       for (const bf of binaryFiles) {
         if (!existingNames.has(bf.path)) {
@@ -131,6 +149,22 @@ export function App() {
     setViewed(filePath, viewed)
   }, [setViewed])
 
+  const sidebarContent = (
+    <div className="sidebar-content">
+      <FileTree
+        files={files}
+        activeFile={activeFile}
+        commentCounts={commentCounts}
+        viewedFiles={viewedFiles}
+        untrackedFiles={untrackedSet}
+        onFileClick={handleFileClick}
+        collapsed={sidebar.collapsed}
+        onToggleCollapse={handleToggleCollapse}
+      />
+      {!sidebar.collapsed && <CommentTracker comments={comments} />}
+    </div>
+  )
+
   if (!loaded || loading) {
     return (
       <div className="loading">
@@ -170,19 +204,27 @@ export function App() {
         onCopyComments={copyAllComments}
       />
       <div className="app-body">
-        <aside className={`sidebar ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-          <FileTree
-            files={files}
-            activeFile={activeFile}
-            commentCounts={commentCounts}
-            viewedFiles={viewedFiles}
-            untrackedFiles={untrackedSet}
-            onFileClick={handleFileClick}
-            collapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((c) => !c)}
-          />
-          {!sidebarCollapsed && <CommentTracker comments={comments} />}
-        </aside>
+        {sidebar.collapsed ? (
+          <aside className="sidebar sidebar-collapsed" style={{ width: sidebar.visibleSize() }}>
+            {sidebarContent}
+          </aside>
+        ) : (
+          <Resizable
+            width={sidebar.visibleSize(maxSidebarWidth)}
+            height={0}
+            axis="x"
+            resizeHandles={['e']}
+            minConstraints={[SidebarStorage.minSize, 0]}
+            maxConstraints={[maxSidebarWidth, 0]}
+            onResize={handleResize}
+            onResizeStop={handleResizeStop}
+            handle={<div className="sidebar-resize-handle" />}
+          >
+            <aside className="sidebar" style={{ width: sidebar.visibleSize(maxSidebarWidth) }}>
+              {sidebarContent}
+            </aside>
+          </Resizable>
+        )}
         <main className="main">
           <Virtualizer className="main-scroll" contentClassName="main-content">
             <DiffViewer
