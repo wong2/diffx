@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.0
+
+### Minor Changes
+
+- 34854f2: Stick the current file's header to the top while scrolling through its diff
+
+### Patch Changes
+
+- 34854f2: Fix hunk-context expansion controls never appearing: files upgraded from a partial to a full diff now remount so their expand controls render
+
 ## 0.14.0
 
 ### Minor Changes
