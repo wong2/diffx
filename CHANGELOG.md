@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.16.0
+
+### Minor Changes
+
+- 9c27f70: Add draggable resizing to the file sidebar, with width and collapsed state persisted across sessions.
+
 ## 0.15.0
 
 ### Minor Changes

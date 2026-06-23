@@ -1,6 +1,6 @@
 {
   "name": "diffx-cli",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Local code review tool for git diffs with a GitHub PR-like web UI",
   "type": "module",
   "license": "MIT",
