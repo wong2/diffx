@@ -164,6 +164,19 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
     return c.json({ old: oldContent, new: newContent })
   })
 
+  app.get('/api/file', async (c) => {
+    const path = c.req.query('path')
+    if (!path) return c.json({ error: 'Missing path' }, 400)
+    if (!isSafePath(path, process.cwd())) return c.json({ error: 'Forbidden' }, 403)
+    const fullPath = join(process.cwd(), path)
+    try {
+      const content = await readFile(fullPath, 'utf-8')
+      return c.text(content)
+    } catch {
+      return c.json({ error: 'File not found' }, 404)
+    }
+  })
+
   app.get('/api/settings', (c) => {
     return c.json(loadSettings())
   })
@@ -201,9 +214,11 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
     const comment = {
       id: crypto.randomUUID(),
       filePath: body.filePath,
+      anchorType: (body.anchorType ?? 'line') as 'line' | 'rendered',
       side: body.side,
       lineNumber: body.lineNumber,
       lineContent: body.lineContent,
+      renderedAnchor: body.renderedAnchor,
       body: body.body,
       status: 'open' as const,
       createdAt: Date.now(),

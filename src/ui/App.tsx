@@ -122,6 +122,7 @@ export function App() {
   const fileAnnotationsMap = useMemo(() => {
     const map = new Map<string, { side: ReviewComment['side']; lineNumber: number; metadata: ReviewComment }[]>()
     for (const c of comments) {
+      if (c.anchorType === 'rendered') continue
       let list = map.get(c.filePath)
       if (!list) {
         list = []
@@ -129,7 +130,7 @@ export function App() {
       }
       list.push({
         side: c.side,
-        lineNumber: c.lineNumber,
+        lineNumber: c.lineNumber!,
         metadata: c,
       })
     }

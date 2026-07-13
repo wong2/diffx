@@ -1,7 +1,7 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { DiffLineAnnotation } from '@pierre/diffs'
-import type { ReviewComment } from '../../types'
+import type { ReviewComment, RenderedAnchor } from '../../types'
 
 const COMMENTS_KEY = ['comments']
 
@@ -15,7 +15,7 @@ export function useComments() {
   const { data: comments = [] } = useQuery({ queryKey: COMMENTS_KEY, queryFn: fetchComments, refetchInterval: 3000 })
 
   const addMutation = useMutation({
-    mutationFn: async (params: { filePath: string; side: 'deletions' | 'additions'; lineNumber: number; lineContent: string; body: string }) => {
+    mutationFn: async (params: { filePath: string; anchorType: 'line' | 'rendered'; side?: 'deletions' | 'additions'; lineNumber?: number; lineContent?: string; renderedAnchor?: RenderedAnchor; body: string }) => {
       const res = await fetch('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,7 +56,14 @@ export function useComments() {
 
   const addComment = useCallback(
     (filePath: string, side: 'deletions' | 'additions', lineNumber: number, lineContent: string, body: string) => {
-      addMutation.mutate({ filePath, side, lineNumber, lineContent, body })
+      addMutation.mutate({ filePath, anchorType: 'line', side, lineNumber, lineContent, body })
+    },
+    [addMutation],
+  )
+
+  const addRenderedComment = useCallback(
+    (filePath: string, anchor: RenderedAnchor, body: string) => {
+      addMutation.mutate({ filePath, anchorType: 'rendered', renderedAnchor: anchor, body })
     },
     [addMutation],
   )
@@ -85,6 +92,10 @@ export function useComments() {
   const formatAllComments = useCallback((): string => {
     if (comments.length === 0) return ''
 
+    function escapeXmlAttr(s: string): string {
+      return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    }
+
     const grouped = new Map<string, ReviewComment[]>()
     for (const comment of comments) {
       const list = grouped.get(comment.filePath) ?? []
@@ -96,11 +107,17 @@ export function useComments() {
     for (const [filePath, fileComments] of grouped) {
       lines.push(`<file path="${filePath}">`)
       for (const comment of fileComments) {
-        lines.push(`<comment line="${comment.lineNumber}">`)
-        const prefix = comment.side === 'additions' ? '+' : '-'
-        lines.push(`<code>${prefix} ${comment.lineContent}</code>`)
-        lines.push(comment.body)
-        lines.push('</comment>')
+        if (comment.anchorType === 'rendered' && comment.renderedAnchor) {
+          lines.push(`<comment anchor="${escapeXmlAttr(comment.renderedAnchor.selectedText)}" context="${escapeXmlAttr(comment.renderedAnchor.context)}">`)
+          lines.push(comment.body)
+          lines.push('</comment>')
+        } else {
+          lines.push(`<comment line="${comment.lineNumber!}">`)
+          const prefix = comment.side === 'additions' ? '+' : '-'
+          lines.push(`<code>${prefix} ${comment.lineContent}</code>`)
+          lines.push(comment.body)
+          lines.push('</comment>')
+        }
       }
       lines.push('</file>')
     }
@@ -112,10 +129,10 @@ export function useComments() {
   const getAnnotationsForFile = useCallback(
     (filePath: string): DiffLineAnnotation<ReviewComment>[] => {
       return comments
-        .filter((c) => c.filePath === filePath)
+        .filter((c) => c.filePath === filePath && c.anchorType !== 'rendered')
         .map((c) => ({
-          side: c.side,
-          lineNumber: c.lineNumber,
+          side: c.side!,
+          lineNumber: c.lineNumber!,
           metadata: c,
         }))
     },
@@ -130,6 +147,7 @@ export function useComments() {
   return {
     comments,
     addComment,
+    addRenderedComment,
     removeComment,
     editComment,
     resolveComment,
