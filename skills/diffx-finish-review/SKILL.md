@@ -20,19 +20,36 @@ curl -s http://localhost:<port>/api/comments
 
 Replace `<port>` with the port number diffx reported on startup (visible in the server log output).
 
-The response is a JSON array of comment objects:
+Comments come in two types. A **line comment** is anchored to a specific diff line; a **rendered comment** is anchored to selected text in a rendered markdown file.
 
 ```json
 [
   {
     "id": "uuid",
     "filePath": "src/utils/parser.ts",
+    "anchorType": "line",
     "side": "additions",
     "lineNumber": 42,
     "lineContent": "const x = tokenize(input)",
     "body": "Rename x to parsedToken for clarity",
     "status": "open",
     "createdAt": 1234567890,
+    "replies": []
+  },
+  {
+    "id": "uuid2",
+    "filePath": "docs/README.md",
+    "anchorType": "rendered",
+    "renderedAnchor": {
+      "selectedText": "quick start guide",
+      "context": "...see the quick start guide for details...",
+      "paragraphIndex": 3,
+      "startOffset": 8,
+      "endOffset": 23
+    },
+    "body": "This link is broken, update it to point to docs/getting-started.md",
+    "status": "open",
+    "createdAt": 1234567891,
     "replies": []
   }
 ]
@@ -45,7 +62,9 @@ For each comment with `"status": "open"`, first determine the intent — is it a
 #### Change requests (e.g., "Rename x to parsedToken", "Extract this into a helper")
 
 1. Read the file at `filePath`
-2. Find the relevant code using `lineContent` as context
+2. Locate the relevant text:
+   - **Line comment** (`anchorType === "line"` or missing): use `lineContent` to find the line
+   - **Rendered comment** (`anchorType === "rendered"`): use `renderedAnchor.selectedText` to find the passage; use `renderedAnchor.context` for disambiguation if the text appears multiple times
 3. Apply the change described in `body`
 4. Reply to the comment explaining what you did, then mark it as resolved:
 
@@ -71,11 +90,12 @@ curl -s -X POST http://localhost:<port>/api/comments/<id>/replies \
   -d '{"body": "A Map would work too, but we use a plain object here because..."}'
 ```
 
-The `side` field tells you whether the comment is on an added line (`additions`) or a deleted line (`deletions`).
+For line comments, `side` tells you whether the comment is on an added line (`additions`) or a deleted line (`deletions`). Rendered comments have no `side`.
 
 ### 3. Handle edge cases
 
 - If a comment is ambiguous, reply to ask for clarification rather than guessing.
+- If a rendered comment's `selectedText` appears multiple times in the file, use `renderedAnchor.context` to find the right occurrence.
 - If multiple comments interact (e.g., a rename that affects several places), handle them together.
 - If there are no open comments, tell the user there's nothing to process.
 
