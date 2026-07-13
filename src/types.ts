@@ -4,12 +4,22 @@ export interface CommentReply {
   createdAt: number
 }
 
+export interface RenderedAnchor {
+  selectedText: string
+  context: string
+  paragraphIndex: number
+  startOffset: number
+  endOffset: number
+}
+
 export interface ReviewComment {
   id: string
   filePath: string
-  side: 'deletions' | 'additions'
-  lineNumber: number
-  lineContent: string
+  anchorType: 'line' | 'rendered'
+  side?: 'deletions' | 'additions'
+  lineNumber?: number
+  lineContent?: string
+  renderedAnchor?: RenderedAnchor
   body: string
   status: 'open' | 'resolved'
   createdAt: number

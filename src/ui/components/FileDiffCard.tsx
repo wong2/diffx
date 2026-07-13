@@ -4,6 +4,7 @@ import type { DiffLineAnnotation, FileDiffMetadata, AnnotationSide } from '@pier
 import type { ReviewComment } from '../../types'
 import { CommentForm } from './CommentForm'
 import { CommentBubble } from './CommentBubble'
+import { MarkdownView } from './MarkdownView'
 
 interface PendingComment {
   side: AnnotationSide
@@ -38,6 +39,8 @@ export const FileDiffCard = memo(function FileDiffCard({
   onDeleteComment,
 }: FileDiffCardProps) {
   const [pending, setPending] = useState<PendingComment | null>(null)
+  const isMd = filePath.endsWith('.md')
+  const [viewMode, setViewMode] = useState<'diff' | 'rendered'>('diff')
 
   const getLineContent = (side: AnnotationSide, lineNumber: number): string => {
     const lines = side === 'additions' ? fileDiff.additionLines : fileDiff.deletionLines
@@ -89,6 +92,35 @@ export const FileDiffCard = memo(function FileDiffCard({
         </div>
       ) : (
         <>
+          {isMd && viewMode === 'rendered' ? (
+            <>
+              <div className="rendered-mode-header" onClick={(e) => e.stopPropagation()}>
+                <div className="toolbar-toggle">
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setViewMode('diff')}
+                  >
+                    Diff
+                  </button>
+                  <button
+                    className="btn btn-sm btn-active"
+                    onClick={() => setViewMode('rendered')}
+                  >
+                    Rendered
+                  </button>
+                </div>
+                <label className="viewed-label">
+                  <input
+                    type="checkbox"
+                    checked={viewed}
+                    onChange={(e) => onViewedChange(filePath, e.target.checked)}
+                  />
+                  Viewed
+                </label>
+              </div>
+              <MarkdownView filePath={filePath} />
+            </>
+          ) : (
           <FileDiff<ReviewComment | { _pending: true }>
             fileDiff={fileDiff}
             options={{
@@ -103,14 +135,32 @@ export const FileDiffCard = memo(function FileDiffCard({
             }}
             lineAnnotations={allAnnotations}
             renderHeaderMetadata={() => (
-              <label className="viewed-label" onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  checked={viewed}
-                  onChange={(e) => onViewedChange(filePath, e.target.checked)}
-                />
-                Viewed
-              </label>
+              <>
+                {isMd && (
+                  <div className="toolbar-toggle" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className={`btn btn-sm${viewMode === 'diff' ? ' btn-active' : ''}`}
+                      onClick={() => setViewMode('diff')}
+                    >
+                      Diff
+                    </button>
+                    <button
+                      className={`btn btn-sm${viewMode === 'rendered' ? ' btn-active' : ''}`}
+                      onClick={() => setViewMode('rendered')}
+                    >
+                      Rendered
+                    </button>
+                  </div>
+                )}
+                <label className="viewed-label" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={viewed}
+                    onChange={(e) => onViewedChange(filePath, e.target.checked)}
+                  />
+                  Viewed
+                </label>
+              </>
             )}
             renderAnnotation={(annotation) => {
               if ('_pending' in annotation.metadata) {
@@ -146,6 +196,7 @@ export const FileDiffCard = memo(function FileDiffCard({
               </button>
             )}
           />
+          )}
         </>
       )}
     </div>

@@ -1051,3 +1051,133 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+/* Markdown body (comment bubbles and rendered markdown view) */
+.markdown-body {
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
+    color: var(--text);
+}
+
+.markdown-body p {
+    margin-bottom: 6px;
+}
+
+.markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 20px;
+    margin-bottom: 6px;
+}
+
+.markdown-body li {
+    margin-bottom: 2px;
+}
+
+.markdown-body code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: var(--bg-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+}
+
+.markdown-body pre {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin-bottom: 8px;
+}
+
+.markdown-body pre code {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 12px;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    font-weight: 600;
+    margin-bottom: 8px;
+    margin-top: 12px;
+    color: var(--text);
+}
+
+.markdown-body h1:first-child,
+.markdown-body h2:first-child,
+.markdown-body h3:first-child {
+    margin-top: 0;
+}
+
+.markdown-body blockquote {
+    border-left: 3px solid var(--border);
+    padding-left: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+/* Rendered markdown view layout */
+.rendered-markdown-view {
+    display: flex;
+    min-height: 200px;
+}
+
+/* Comment margin */
+.comment-margin {
+    border-left: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+/* Mark highlight for selected text in rendered view */
+mark[data-anchor-id] {
+    background: var(--comment-bg);
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
+
+/* Selection tooltip floating button */
+.selection-tooltip {
+    position: fixed;
+    z-index: 300;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: none;
+    background: var(--primary);
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    line-height: 1;
+    padding: 0;
+}
+
+.selection-tooltip:hover {
+    background: var(--primary-hover);
+}
+
+.rendered-mode-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+}
