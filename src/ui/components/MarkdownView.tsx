@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode, type JSX } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import type { ReviewComment, RenderedAnchor } from '../../types'
 import { useComments } from '../hooks/useComments'
 import { MermaidBlock } from './MermaidBlock'
@@ -37,13 +38,15 @@ function injectHighlights(
   paragraphIndex: number,
   markRefs: Map<string, HTMLElement>,
 ): ReactNode {
-  const relevantComments = comments.filter(
-    (c) => c.renderedAnchor?.paragraphIndex === paragraphIndex,
-  )
-  if (relevantComments.length === 0) return children
-
+  // Primary: match by paragraphIndex. Fallback: any comment whose selectedText
+  // appears in this paragraph (handles comments injected without a known index).
+  const byIndex = comments.filter((c) => c.renderedAnchor?.paragraphIndex === paragraphIndex)
   const text = flattenText(children)
-  if (!text) return children
+  const relevantComments =
+    byIndex.length > 0
+      ? byIndex
+      : comments.filter((c) => c.renderedAnchor?.selectedText && text.includes(c.renderedAnchor.selectedText))
+  if (relevantComments.length === 0 || !text) return children
 
   // Build sorted list of ranges to highlight
   const ranges = relevantComments
@@ -200,6 +203,27 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
   return (
     <div className="rendered-markdown-view" style={{ display: 'flex', gap: 0 }}>
       <SelectionTooltip position={tooltipPos} onClick={handleTooltipClick} />
+      {pendingAnchor && (
+        <div
+          style={{
+            position: 'fixed',
+            left: Math.min(pendingAnchor.position.x, window.innerWidth - 360),
+            top: pendingAnchor.position.y + 8,
+            width: 340,
+            zIndex: 1000,
+            boxShadow: '0 4px 24px rgba(0,0,0,0.18)',
+            borderRadius: 8,
+          }}
+        >
+          <CommentForm
+            onSubmit={(body) => {
+              addRenderedComment(filePath, pendingAnchor.anchor, body)
+              setPendingAnchor(null)
+            }}
+            onCancel={() => setPendingAnchor(null)}
+          />
+        </div>
+      )}
       <div className="markdown-body" ref={containerRef} style={{ flex: 1, minWidth: 0, padding: '24px' }}>
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
@@ -219,18 +243,9 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
             h5: makeBlockRenderer('h5'),
             h6: makeBlockRenderer('h6'),
           }}
-        />
-        {pendingAnchor && (
-          <div style={{ marginTop: '16px' }}>
-            <CommentForm
-              onSubmit={(body) => {
-                addRenderedComment(filePath, pendingAnchor.anchor, body)
-                setPendingAnchor(null)
-              }}
-              onCancel={() => setPendingAnchor(null)}
-            />
-          </div>
-        )}
+        >
+          {content}
+        </ReactMarkdown>
       </div>
       <RenderedCommentMargin
         comments={comments}

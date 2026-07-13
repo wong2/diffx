@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { UserCircle, CheckCircle2, Bot } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
 import type { ReviewComment } from '../../types'
 import { timeAgo } from '../utils'
 
@@ -41,7 +42,7 @@ export function CommentBubble({ comment, onDelete }: CommentBubbleProps) {
         )}
       </div>
       <div className="comment-bubble-body markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.body}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{comment.body}</ReactMarkdown>
       </div>
       {comment.replies?.length > 0 && (
         <div className="comment-replies">
@@ -52,7 +53,7 @@ export function CommentBubble({ comment, onDelete }: CommentBubbleProps) {
                 <span className="comment-bubble-time">{timeAgo(reply.createdAt)}</span>
               </div>
               <div className="comment-reply-body markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{reply.body}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{reply.body}</ReactMarkdown>
               </div>
             </div>
           ))}

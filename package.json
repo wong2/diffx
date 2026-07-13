@@ -44,6 +44,7 @@
     "open": "^11.0.0",
     "react-markdown": "^10.1.0",
     "react-resizable": "^4.0.1",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
