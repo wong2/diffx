@@ -18,7 +18,9 @@ export interface ReviewComment {
   anchorType: 'line' | 'rendered'
   side?: 'deletions' | 'additions'
   lineNumber?: number
+  endLineNumber?: number
   lineContent?: string
+  lineContents?: string[]
   renderedAnchor?: RenderedAnchor
   body: string
   status: 'open' | 'resolved'

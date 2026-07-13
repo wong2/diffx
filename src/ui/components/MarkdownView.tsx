@@ -8,6 +8,7 @@ import { MermaidBlock } from './MermaidBlock'
 import { SelectionTooltip } from './SelectionTooltip'
 import { RenderedCommentMargin } from './RenderedCommentMargin'
 import { CommentForm } from './CommentForm'
+import { CommentBubble } from './CommentBubble'
 
 interface MarkdownViewProps {
   filePath: string
@@ -90,9 +91,22 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null)
+  const [markPopover, setMarkPopover] = useState<{ commentId: string; pos: { x: number; y: number } } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const markRefs = useRef<Map<string, HTMLElement>>(new Map())
   const paragraphIndexRef = useRef(0)
+
+  useEffect(() => {
+    if (!markPopover) return
+    const dismiss = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.mark-popover') && !target.closest('mark[data-anchor-id]')) {
+        setMarkPopover(null)
+      }
+    }
+    document.addEventListener('click', dismiss)
+    return () => document.removeEventListener('click', dismiss)
+  }, [!!markPopover])
 
   useEffect(() => {
     setContent(null)
@@ -224,9 +238,40 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
           />
         </div>
       )}
-      <div className="markdown-body" ref={containerRef} style={{ flex: 1, minWidth: 0, padding: '24px' }}>
+      {markPopover && (() => {
+        const comment = comments.find((c) => c.id === markPopover.commentId)
+        if (!comment) return null
+        return (
+          <div
+            className="mark-popover"
+            style={{
+              position: 'fixed',
+              left: Math.min(markPopover.pos.x, window.innerWidth - 360),
+              top: markPopover.pos.y,
+              width: 340,
+              zIndex: 950,
+            }}
+          >
+            <CommentBubble comment={comment} onDelete={(cid) => { removeComment(cid); setMarkPopover(null) }} />
+          </div>
+        )
+      })()}
+      <div
+        className="markdown-body"
+        ref={containerRef}
+        style={{ flex: 1, minWidth: 0, padding: '24px' }}
+        onClick={(e) => {
+          const mark = (e.target as HTMLElement).closest('mark[data-anchor-id]')
+          if (!mark) return
+          e.stopPropagation()
+          const cid = mark.getAttribute('data-anchor-id')!
+          const rect = mark.getBoundingClientRect()
+          setMarkPopover((prev) => prev?.commentId === cid ? null : { commentId: cid, pos: { x: rect.left, y: rect.bottom + 8 } })
+        }}
+      >
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          key={comments.map(c => c.id).join(',')}
+          remarkPlugins={[remarkGfm, remarkBreaks]}
           components={{
             code({ className, children }) {
               const lang = /language-(\w+)/.exec(className ?? '')?.[1]

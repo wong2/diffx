@@ -15,7 +15,7 @@ export function useComments() {
   const { data: comments = [] } = useQuery({ queryKey: COMMENTS_KEY, queryFn: fetchComments, refetchInterval: 3000 })
 
   const addMutation = useMutation({
-    mutationFn: async (params: { filePath: string; anchorType: 'line' | 'rendered'; side?: 'deletions' | 'additions'; lineNumber?: number; lineContent?: string; renderedAnchor?: RenderedAnchor; body: string }) => {
+    mutationFn: async (params: { filePath: string; anchorType: 'line' | 'rendered'; side?: 'deletions' | 'additions'; lineNumber?: number; endLineNumber?: number; lineContent?: string; lineContents?: string[]; renderedAnchor?: RenderedAnchor; body: string }) => {
       const res = await fetch('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,8 +55,8 @@ export function useComments() {
   })
 
   const addComment = useCallback(
-    (filePath: string, side: 'deletions' | 'additions', lineNumber: number, lineContent: string, body: string) => {
-      addMutation.mutate({ filePath, anchorType: 'line', side, lineNumber, lineContent, body })
+    (filePath: string, side: 'deletions' | 'additions', lineNumber: number, lineContent: string, body: string, endLineNumber?: number, lineContents?: string[]) => {
+      addMutation.mutate({ filePath, anchorType: 'line', side, lineNumber, endLineNumber, lineContent, lineContents, body })
     },
     [addMutation],
   )
@@ -112,9 +112,15 @@ export function useComments() {
           lines.push(comment.body)
           lines.push('</comment>')
         } else {
-          lines.push(`<comment line="${comment.lineNumber!}">`)
+          const isRange = comment.endLineNumber && comment.endLineNumber !== comment.lineNumber
+          const lineAttr = isRange ? `lines="${comment.lineNumber}-${comment.endLineNumber}"` : `line="${comment.lineNumber!}"`
+          lines.push(`<comment ${lineAttr}>`)
           const prefix = comment.side === 'additions' ? '+' : '-'
-          lines.push(`<code>${prefix} ${comment.lineContent}</code>`)
+          if (isRange && comment.lineContents) {
+            lines.push(`<code>${comment.lineContents.map(l => `${prefix} ${l}`).join('\n')}</code>`)
+          } else {
+            lines.push(`<code>${prefix} ${comment.lineContent}</code>`)
+          }
           lines.push(comment.body)
           lines.push('</comment>')
         }
@@ -132,7 +138,7 @@ export function useComments() {
         .filter((c) => c.filePath === filePath && c.anchorType !== 'rendered')
         .map((c) => ({
           side: c.side!,
-          lineNumber: c.lineNumber!,
+          lineNumber: c.endLineNumber ?? c.lineNumber!,
           metadata: c,
         }))
     },

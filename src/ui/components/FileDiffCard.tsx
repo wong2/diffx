@@ -1,6 +1,7 @@
-import { useState, memo } from 'react'
+import { useState, useEffect, useRef, memo } from 'react'
 import { FileDiff } from '@pierre/diffs/react'
 import type { DiffLineAnnotation, FileDiffMetadata, AnnotationSide } from '@pierre/diffs'
+import type { GetHoveredLineResult } from '@pierre/diffs'
 import type { ReviewComment } from '../../types'
 import { CommentForm } from './CommentForm'
 import { CommentBubble } from './CommentBubble'
@@ -9,6 +10,15 @@ import { MarkdownView } from './MarkdownView'
 interface PendingComment {
   side: AnnotationSide
   lineNumber: number
+  endLineNumber: number
+}
+
+interface DragState {
+  startLine: number
+  startSide: AnnotationSide
+  currentLine: number
+  mouseX: number
+  mouseY: number
 }
 
 interface FileDiffCardProps {
@@ -21,7 +31,7 @@ interface FileDiffCardProps {
   softWrap: boolean
   viewed: boolean
   onViewedChange: (filePath: string, viewed: boolean) => void
-  onAddComment: (filePath: string, side: AnnotationSide, lineNumber: number, lineContent: string, body: string) => void
+  onAddComment: (filePath: string, side: AnnotationSide, lineNumber: number, lineContent: string, body: string, endLineNumber?: number, lineContents?: string[]) => void
   onDeleteComment: (id: string) => void
 }
 
@@ -39,13 +49,39 @@ export const FileDiffCard = memo(function FileDiffCard({
   onDeleteComment,
 }: FileDiffCardProps) {
   const [pending, setPending] = useState<PendingComment | null>(null)
+  const [dragState, setDragState] = useState<DragState | null>(null)
   const isMd = filePath.endsWith('.md')
   const [viewMode, setViewMode] = useState<'diff' | 'rendered'>('diff')
+  const getHoveredLineRef = useRef<(() => GetHoveredLineResult<'diff'> | undefined) | null>(null)
+
+  useEffect(() => {
+    if (!dragState) return
+    const onMove = (e: MouseEvent) => {
+      const hov = getHoveredLineRef.current?.()
+      setDragState((prev) => {
+        if (!prev) return null
+        return {
+          ...prev,
+          currentLine: hov ? Math.max(hov.lineNumber, prev.startLine) : prev.currentLine,
+          mouseX: e.clientX,
+          mouseY: e.clientY,
+        }
+      })
+    }
+    const onUp = () => {
+      setPending({ side: dragState.startSide, lineNumber: dragState.startLine, endLineNumber: dragState.currentLine })
+      setDragState(null)
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [dragState?.startLine, dragState?.startSide])
 
   const getLineContent = (side: AnnotationSide, lineNumber: number): string => {
     const lines = side === 'additions' ? fileDiff.additionLines : fileDiff.deletionLines
-    // Full (non-partial) diffs carry the entire file, so any line — including
-    // expanded context outside hunks — can be addressed directly.
     if (!fileDiff.isPartial) {
       return lines[lineNumber - 1] ?? ''
     }
@@ -63,13 +99,21 @@ export const FileDiffCard = memo(function FileDiffCard({
     return ''
   }
 
+  const getLineContents = (side: AnnotationSide, startLine: number, endLine: number): string[] => {
+    const result: string[] = []
+    for (let ln = startLine; ln <= endLine; ln++) {
+      result.push(getLineContent(side, ln))
+    }
+    return result
+  }
+
   const allAnnotations: DiffLineAnnotation<ReviewComment | { _pending: true }>[] = [
     ...annotations,
     ...(pending
       ? [
           {
             side: pending.side,
-            lineNumber: pending.lineNumber,
+            lineNumber: pending.endLineNumber,
             metadata: { _pending: true as const },
           },
         ]
@@ -78,6 +122,16 @@ export const FileDiffCard = memo(function FileDiffCard({
 
   return (
     <div className={`file-diff-card ${viewed ? 'file-diff-viewed' : ''}`} id={id}>
+      {dragState && (
+        <div
+          className="drag-range-pill"
+          style={{ position: 'fixed', left: dragState.mouseX + 16, top: dragState.mouseY - 14, pointerEvents: 'none', zIndex: 9999 }}
+        >
+          {dragState.startLine === dragState.currentLine
+            ? `Line ${dragState.startLine}`
+            : `Lines ${dragState.startLine}–${dragState.currentLine}`}
+        </div>
+      )}
       {viewed ? (
         <div className="file-diff-viewed-header">
           <span className="file-diff-viewed-name">{filePath}</span>
@@ -167,8 +221,10 @@ export const FileDiffCard = memo(function FileDiffCard({
                 return (
                   <CommentForm
                     onSubmit={(body) => {
-                      const lineContent = getLineContent(pending!.side, pending!.lineNumber)
-                      onAddComment(filePath, pending!.side, pending!.lineNumber, lineContent, body)
+                      const startLine = pending!.lineNumber
+                      const endLine = pending!.endLineNumber
+                      const contents = getLineContents(pending!.side, startLine, endLine)
+                      onAddComment(filePath, pending!.side, startLine, contents[0], body, endLine !== startLine ? endLine : undefined, endLine !== startLine ? contents : undefined)
                       setPending(null)
                     }}
                     onCancel={() => setPending(null)}
@@ -182,19 +238,28 @@ export const FileDiffCard = memo(function FileDiffCard({
                 />
               )
             }}
-            renderGutterUtility={(getHoveredLine) => (
-              <button
-                className="gutter-add-btn"
-                onClick={() => {
-                  const line = getHoveredLine()
-                  if (line) {
-                    setPending({ side: line.side, lineNumber: line.lineNumber })
-                  }
-                }}
-              >
-                +
-              </button>
-            )}
+            renderGutterUtility={(getHoveredLine) => {
+              getHoveredLineRef.current = getHoveredLine
+              return (
+                <button
+                  className="gutter-add-btn"
+                  onMouseDown={(e) => {
+                    const line = getHoveredLine()
+                    if (!line) return
+                    e.preventDefault()
+                    setDragState({
+                      startLine: line.lineNumber,
+                      startSide: line.side,
+                      currentLine: line.lineNumber,
+                      mouseX: e.clientX,
+                      mouseY: e.clientY,
+                    })
+                  }}
+                >
+                  +
+                </button>
+              )
+            }}
           />
           )}
         </>
