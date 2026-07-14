@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 
 interface MermaidBlockProps {
   code: string
@@ -19,8 +19,11 @@ async function getMermaid() {
   return mermaid
 }
 
-export function MermaidBlock({ code }: MermaidBlockProps) {
-  const [svg, setSvg] = useState<string | null>(null)
+function MermaidBlockImpl({ code }: MermaidBlockProps) {
+  // The SVG is written imperatively into this ref rather than through React
+  // state, so it is never torn down by a re-render and the raw source is never
+  // shown as a fallback (previously a null-svg render flashed the code block).
+  const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
   const idRef = useRef(`mermaid-${++mermaidIdCounter}`)
 
@@ -30,8 +33,11 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     async function render() {
       const mermaid = await getMermaid()
       try {
-        const { svg: rendered } = await mermaid.render(idRef.current, code)
-        if (!cancelled) setSvg(rendered)
+        const { svg } = await mermaid.render(idRef.current, code)
+        if (!cancelled && containerRef.current) {
+          containerRef.current.innerHTML = svg
+          setError(null)
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err))
       }
@@ -49,7 +55,8 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
     )
   }
 
-  if (!svg) return <pre><code>{code}</code></pre>
-
-  return <div dangerouslySetInnerHTML={{ __html: svg }} />
+  return <div className="mermaid-rendered" ref={containerRef} />
 }
+
+/** Memoized so a diagram only re-renders when its source `code` changes, not on unrelated highlight/comment state updates. */
+export const MermaidBlock = memo(MermaidBlockImpl, (prev, next) => prev.code === next.code)

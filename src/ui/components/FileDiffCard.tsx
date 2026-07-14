@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, memo } from 'react'
 import { FileDiff } from '@pierre/diffs/react'
 import type { DiffLineAnnotation, FileDiffMetadata, AnnotationSide } from '@pierre/diffs'
-import type { GetHoveredLineResult } from '@pierre/diffs'
+import type { GetHoveredLineResult, SelectedLineRange } from '@pierre/diffs'
 import type { ReviewComment } from '../../types'
 import { CommentForm } from './CommentForm'
 import { CommentBubble } from './CommentBubble'
@@ -13,18 +13,46 @@ interface PendingComment {
   endLineNumber: number
 }
 
-interface DragState {
-  startLine: number
-  startSide: AnnotationSide
-  currentLine: number
-  mouseX: number
-  mouseY: number
+/** Finds the diff library's <diffs-container> shadow root within a card. */
+function diffShadowRoot(card: HTMLElement | null): ShadowRoot | null {
+  const host = card?.querySelector('diffs-container') as HTMLElement | null
+  return host?.shadowRoot ?? null
+}
+
+/** The line number whose row contains viewport-Y, in the given side's gutter
+ * column. Used to track a "+"-button drag, since the library suppresses its
+ * onLineEnter callback while a mouse button is held. */
+function lineNumberAtY(root: ShadowRoot, clientY: number, side: AnnotationSide): number | null {
+  const columns = [...root.querySelectorAll('code')]
+  const column = columns.find((c) => c.hasAttribute(`data-${side}`)) ?? columns[0]
+  if (!column) return null
+  let best: Element | null = null
+  for (const cell of column.querySelectorAll('[data-column-number]')) {
+    const rect = cell.getBoundingClientRect()
+    if (rect.height === 0) continue
+    if (clientY >= rect.top && clientY <= rect.bottom) {
+      best = cell
+      break
+    }
+    if (clientY > rect.bottom) best = cell // cursor past the last visible row
+  }
+  const n = best ? parseInt(best.getAttribute('data-column-number') ?? '', 10) : NaN
+  return Number.isNaN(n) ? null : n
+}
+
+/** Orders a raw selection so start <= end and resolves it to a single side. */
+function normalizeRange(range: SelectedLineRange): PendingComment {
+  const side = (range.side ?? range.endSide ?? 'additions') as AnnotationSide
+  const lineNumber = Math.min(range.start, range.end)
+  const endLineNumber = Math.max(range.start, range.end)
+  return { side, lineNumber, endLineNumber }
 }
 
 interface FileDiffCardProps {
   id?: string
   fileDiff: FileDiffMetadata
   filePath: string
+  theme: 'light' | 'dark'
   annotations: DiffLineAnnotation<ReviewComment>[]
   diffStyle: 'split' | 'unified'
   tabSize: number
@@ -39,6 +67,7 @@ export const FileDiffCard = memo(function FileDiffCard({
   id,
   fileDiff,
   filePath,
+  theme,
   annotations,
   diffStyle,
   tabSize,
@@ -49,36 +78,69 @@ export const FileDiffCard = memo(function FileDiffCard({
   onDeleteComment,
 }: FileDiffCardProps) {
   const [pending, setPending] = useState<PendingComment | null>(null)
-  const [dragState, setDragState] = useState<DragState | null>(null)
+  // One-shot flag: request the library clear its native selection after the
+  // composer closes, without re-clearing on unrelated re-renders (which would
+  // otherwise interrupt an in-progress drag when comments refetch).
+  const [clearSelection, setClearSelection] = useState(false)
+  // Active drag started by pressing and holding the gutter "+" button. Tracks
+  // the hovered end line so the highlight follows the cursor across lines.
+  const [dragRange, setDragRange] = useState<{ start: number; end: number; side: AnnotationSide } | null>(null)
   const isMd = filePath.endsWith('.md')
   const [viewMode, setViewMode] = useState<'diff' | 'rendered'>('diff')
-  const getHoveredLineRef = useRef<(() => GetHoveredLineResult<'diff'> | undefined) | null>(null)
+  // Line currently under the cursor, updated by the library's onLineEnter. This
+  // stays accurate during a button-held drag (getHoveredLine does not).
+  const hoveredLineRef = useRef<{ lineNumber: number; side: AnnotationSide } | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!dragState) return
-    const onMove = (e: MouseEvent) => {
-      const hov = getHoveredLineRef.current?.()
-      setDragState((prev) => {
-        if (!prev) return null
-        return {
-          ...prev,
-          currentLine: hov ? Math.max(hov.lineNumber, prev.startLine) : prev.currentLine,
-          mouseX: e.clientX,
-          mouseY: e.clientY,
-        }
-      })
+    if (clearSelection) setClearSelection(false)
+  }, [clearSelection])
+
+  // Press-and-hold the gutter "+" to drag across lines. Listeners are attached
+  // synchronously here (not in an effect) so a fast click never races the
+  // pointerup, and the composer opens only on release with the covered range.
+  const startPlusDrag = (startLine: number, side: AnnotationSide) => {
+    let endLine = startLine
+    setDragRange({ start: startLine, end: startLine, side })
+    const onMove = (e: PointerEvent) => {
+      const root = diffShadowRoot(cardRef.current)
+      const ln = root ? lineNumberAtY(root, e.clientY, side) : null
+      if (ln != null && ln !== endLine) {
+        endLine = ln
+        setDragRange({ start: startLine, end: ln, side }) // live range highlight
+      }
     }
     const onUp = () => {
-      setPending({ side: dragState.startSide, lineNumber: dragState.startLine, endLineNumber: dragState.currentLine })
-      setDragState(null)
+      document.removeEventListener('pointermove', onMove)
+      document.removeEventListener('pointerup', onUp)
+      setDragRange(null)
+      setPending(normalizeRange({ start: startLine, end: endLine, side, endSide: side }))
     }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-  }, [dragState?.startLine, dragState?.startSide])
+    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointerup', onUp)
+  }
+
+  const closeComposer = () => {
+    setPending(null)
+    setClearSelection(true)
+  }
+
+  // The library only applies `selectedLines` when it is not `undefined`. Drag
+  // selection is left fully native (undefined) so it stays smooth; we only pass
+  // the range to keep it highlighted while composing, or null once to clear.
+  const pendingRange: SelectedLineRange | null = pending
+    ? { start: pending.lineNumber, end: pending.endLineNumber, side: pending.side, endSide: pending.side }
+    : null
+  const dragSelectedLines: SelectedLineRange | null = dragRange
+    ? { start: dragRange.start, end: dragRange.end, side: dragRange.side, endSide: dragRange.side }
+    : null
+  const selectedLines: SelectedLineRange | null | undefined = pending
+    ? pendingRange
+    : dragRange
+    ? dragSelectedLines
+    : clearSelection
+    ? null
+    : undefined
 
   const getLineContent = (side: AnnotationSide, lineNumber: number): string => {
     const lines = side === 'additions' ? fileDiff.additionLines : fileDiff.deletionLines
@@ -121,17 +183,7 @@ export const FileDiffCard = memo(function FileDiffCard({
   ]
 
   return (
-    <div className={`file-diff-card ${viewed ? 'file-diff-viewed' : ''}`} id={id}>
-      {dragState && (
-        <div
-          className="drag-range-pill"
-          style={{ position: 'fixed', left: dragState.mouseX + 16, top: dragState.mouseY - 14, pointerEvents: 'none', zIndex: 9999 }}
-        >
-          {dragState.startLine === dragState.currentLine
-            ? `Line ${dragState.startLine}`
-            : `Lines ${dragState.startLine}–${dragState.currentLine}`}
-        </div>
-      )}
+    <div ref={cardRef} className={`file-diff-card ${viewed ? 'file-diff-viewed' : ''}`} id={id}>
       {viewed ? (
         <div className="file-diff-viewed-header">
           <span className="file-diff-viewed-name">{filePath}</span>
@@ -182,11 +234,20 @@ export const FileDiffCard = memo(function FileDiffCard({
               stickyHeader: true,
               expansionLineCount: 20,
               enableGutterUtility: true,
+              // Selection is enabled only to paint the range highlight. We do
+              // NOT wire onLineSelected — it opened the composer on press and
+              // fought the "+"-drag. Commenting is driven entirely by the gutter
+              // "+" (press, drag, release) below.
+              enableLineSelection: true,
+              onLineEnter: (props) => {
+                hoveredLineRef.current = { lineNumber: props.lineNumber, side: props.annotationSide }
+              },
               theme: { dark: 'github-dark', light: 'github-light' },
-              themeType: 'system',
+              themeType: theme,
               overflow: softWrap ? 'wrap' : 'scroll',
-              unsafeCSS: `:host { --diffs-tab-size: ${tabSize}; }`,
+              unsafeCSS: `:host { --diffs-tab-size: ${tabSize}; --diffs-selection-override: rgba(56, 139, 253, 0.55); }`,
             }}
+            selectedLines={selectedLines}
             lineAnnotations={allAnnotations}
             renderHeaderMetadata={() => (
               <>
@@ -218,16 +279,22 @@ export const FileDiffCard = memo(function FileDiffCard({
             )}
             renderAnnotation={(annotation) => {
               if ('_pending' in annotation.metadata) {
+                const p = pending!
+                const prefix = p.side === 'additions' ? 'R' : 'L'
+                const header =
+                  p.lineNumber === p.endLineNumber
+                    ? `Add a comment on line ${prefix}${p.lineNumber}`
+                    : `Add a comment on lines ${prefix}${p.lineNumber} to ${prefix}${p.endLineNumber}`
                 return (
                   <CommentForm
+                    header={header}
                     onSubmit={(body) => {
-                      const startLine = pending!.lineNumber
-                      const endLine = pending!.endLineNumber
-                      const contents = getLineContents(pending!.side, startLine, endLine)
-                      onAddComment(filePath, pending!.side, startLine, contents[0], body, endLine !== startLine ? endLine : undefined, endLine !== startLine ? contents : undefined)
-                      setPending(null)
+                      const contents = getLineContents(p.side, p.lineNumber, p.endLineNumber)
+                      const isRange = p.endLineNumber !== p.lineNumber
+                      onAddComment(filePath, p.side, p.lineNumber, contents[0], body, isRange ? p.endLineNumber : undefined, isRange ? contents : undefined)
+                      closeComposer()
                     }}
-                    onCancel={() => setPending(null)}
+                    onCancel={closeComposer}
                   />
                 )
               }
@@ -238,28 +305,22 @@ export const FileDiffCard = memo(function FileDiffCard({
                 />
               )
             }}
-            renderGutterUtility={(getHoveredLine) => {
-              getHoveredLineRef.current = getHoveredLine
-              return (
-                <button
-                  className="gutter-add-btn"
-                  onMouseDown={(e) => {
-                    const line = getHoveredLine()
-                    if (!line) return
-                    e.preventDefault()
-                    setDragState({
-                      startLine: line.lineNumber,
-                      startSide: line.side,
-                      currentLine: line.lineNumber,
-                      mouseX: e.clientX,
-                      mouseY: e.clientY,
-                    })
-                  }}
-                >
-                  +
-                </button>
-              )
-            }}
+            renderGutterUtility={(getHoveredLine) => (
+              <button
+                className="gutter-add-btn"
+                onPointerDown={(e) => {
+                  const line = hoveredLineRef.current ?? getHoveredLine()
+                  if (!line) return
+                  // Stop the press from reaching the library's native line
+                  // selection (which would open the composer immediately).
+                  e.preventDefault()
+                  e.stopPropagation()
+                  startPlusDrag(line.lineNumber, line.side)
+                }}
+              >
+                +
+              </button>
+            )}
           />
           )}
         </>

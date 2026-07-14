@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState, useCallback, type ReactNode, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode, type JSX } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+
+// Stable module-level identity so react-markdown never re-parses on re-render.
+const REMARK_PLUGINS = [remarkGfm, remarkBreaks]
 import type { ReviewComment, RenderedAnchor } from '../../types'
 import { useComments } from '../hooks/useComments'
 import { MermaidBlock } from './MermaidBlock'
 import { SelectionTooltip } from './SelectionTooltip'
 import { RenderedCommentMargin } from './RenderedCommentMargin'
 import { CommentForm } from './CommentForm'
-import { CommentBubble } from './CommentBubble'
 
 interface MarkdownViewProps {
   filePath: string
@@ -19,69 +21,12 @@ interface PendingAnchor {
   position: { x: number; y: number }
 }
 
-function highlightText(text: string, commentId: string, markRefs: Map<string, HTMLElement>): ReactNode {
-  return (
-    <mark
-      data-anchor-id={commentId}
-      ref={(el) => {
-        if (el) markRefs.set(commentId, el)
-        else markRefs.delete(commentId)
-      }}
-    >
-      {text}
-    </mark>
-  )
-}
+const HIGHLIGHT_NAME = 'comment'
+const HIGHLIGHT_ACTIVE_NAME = 'comment-active'
 
-function injectHighlights(
-  children: ReactNode,
-  comments: ReviewComment[],
-  paragraphIndex: number,
-  markRefs: Map<string, HTMLElement>,
-): ReactNode {
-  // Primary: match by paragraphIndex. Fallback: any comment whose selectedText
-  // appears in this paragraph (handles comments injected without a known index).
-  const byIndex = comments.filter((c) => c.renderedAnchor?.paragraphIndex === paragraphIndex)
-  const text = flattenText(children)
-  const relevantComments =
-    byIndex.length > 0
-      ? byIndex
-      : comments.filter((c) => c.renderedAnchor?.selectedText && text.includes(c.renderedAnchor.selectedText))
-  if (relevantComments.length === 0 || !text) return children
-
-  // Build sorted list of ranges to highlight
-  const ranges = relevantComments
-    .filter((c) => c.renderedAnchor!.selectedText && text.includes(c.renderedAnchor!.selectedText))
-    .map((c) => ({
-      id: c.id,
-      start: text.indexOf(c.renderedAnchor!.selectedText),
-      end: text.indexOf(c.renderedAnchor!.selectedText) + c.renderedAnchor!.selectedText.length,
-    }))
-    .sort((a, b) => a.start - b.start)
-
-  if (ranges.length === 0) return children
-
-  const parts: ReactNode[] = []
-  let cursor = 0
-  for (const range of ranges) {
-    if (range.start > cursor) parts.push(text.slice(cursor, range.start))
-    parts.push(highlightText(text.slice(range.start, range.end), range.id, markRefs))
-    cursor = range.end
-  }
-  if (cursor < text.length) parts.push(text.slice(cursor))
-
-  return <>{parts}</>
-}
-
-function flattenText(node: ReactNode): string {
-  if (typeof node === 'string') return node
-  if (typeof node === 'number') return String(node)
-  if (!node) return ''
-  if (Array.isArray(node)) return node.map(flattenText).join('')
-  if (typeof node === 'object' && 'props' in (node as object)) {
-    return flattenText((node as { props?: { children?: ReactNode } }).props?.children)
-  }
-  return ''
+/** True when the browser supports the CSS Custom Highlight API (Safari 17.2+/Chrome 105+). */
+function supportsHighlightApi(): boolean {
+  return typeof Highlight !== 'undefined' && typeof CSS !== 'undefined' && !!CSS.highlights
 }
 
 export function MarkdownView({ filePath }: MarkdownViewProps) {
@@ -91,22 +36,12 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
   const [pendingAnchor, setPendingAnchor] = useState<PendingAnchor | null>(null)
-  const [markPopover, setMarkPopover] = useState<{ commentId: string; pos: { x: number; y: number } } | null>(null)
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const markRefs = useRef<Map<string, HTMLElement>>(new Map())
+  // Range per comment id, recomputed whenever comments/content change. Drives both
+  // the painted highlights and the margin-card vertical positions.
+  const rangesRef = useRef<Map<string, Range>>(new Map())
   const paragraphIndexRef = useRef(0)
-
-  useEffect(() => {
-    if (!markPopover) return
-    const dismiss = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (!target.closest('.mark-popover') && !target.closest('mark[data-anchor-id]')) {
-        setMarkPopover(null)
-      }
-    }
-    document.addEventListener('click', dismiss)
-    return () => document.removeEventListener('click', dismiss)
-  }, [!!markPopover])
 
   useEffect(() => {
     setContent(null)
@@ -119,6 +54,41 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
       .then(setContent)
       .catch((err) => setLoadError(err.message))
   }, [filePath])
+
+  // Paint comment highlights as a decoration layer (zero DOM mutation) via the
+  // CSS Custom Highlight API. Recompute when comments, content, or the active
+  // comment change. The active range is promoted into the 'comment-active' group.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || !content) return
+    if (!supportsHighlightApi()) return
+
+    const ranges = buildCommentRanges(container, comments)
+    rangesRef.current = ranges
+
+    const nonActive: Range[] = []
+    let activeRange: Range | null = null
+    for (const [id, range] of ranges) {
+      if (id === activeCommentId) activeRange = range
+      else nonActive.push(range)
+    }
+
+    if (nonActive.length > 0) {
+      CSS.highlights.set(HIGHLIGHT_NAME, new Highlight(...nonActive))
+    } else {
+      CSS.highlights.delete(HIGHLIGHT_NAME)
+    }
+    if (activeRange) {
+      CSS.highlights.set(HIGHLIGHT_ACTIVE_NAME, new Highlight(activeRange))
+    } else {
+      CSS.highlights.delete(HIGHLIGHT_ACTIVE_NAME)
+    }
+
+    return () => {
+      CSS.highlights.delete(HIGHLIGHT_NAME)
+      CSS.highlights.delete(HIGHLIGHT_ACTIVE_NAME)
+    }
+  }, [comments, content, activeCommentId])
 
   const handleSelectionChange = useCallback(() => {
     const sel = window.getSelection()
@@ -184,6 +154,62 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
     if (pos) setPendingAnchor({ anchor, position: pos })
   }, [captureAnchor, tooltipPos])
 
+  // Hit-test a click against the painted (node-less) highlight ranges. If the
+  // click lands inside a comment's range, activate it; otherwise clear.
+  const handleBodyClick = useCallback((e: React.MouseEvent) => {
+    const point = caretPointFromClick(e.clientX, e.clientY)
+    if (!point) {
+      setActiveCommentId(null)
+      return
+    }
+    for (const [id, range] of rangesRef.current) {
+      if (isPointInRange(range, point.node, point.offset)) {
+        setActiveCommentId(id)
+        return
+      }
+    }
+    setActiveCommentId(null)
+  }, [])
+
+  // Clicking a margin card activates its highlight and scrolls it into view.
+  const handleCardActivate = useCallback((id: string) => {
+    setActiveCommentId(id)
+    const range = rangesRef.current.get(id)
+    if (range) {
+      const rect = range.getBoundingClientRect()
+      if (rect.top < 0 || rect.bottom > window.innerHeight) {
+        window.scrollBy({ top: rect.top - window.innerHeight / 3, behavior: 'smooth' })
+      }
+    }
+  }, [])
+
+  // Stable component map: identities never change across renders, so react-markdown
+  // keeps the same element types and never remounts embedded blocks (e.g. MermaidBlock)
+  // when comments/highlight state change. Renderers only touch the stable ref/import.
+  const markdownComponents = useMemo(() => {
+    const makeBlockRenderer = (Tag: keyof JSX.IntrinsicElements) =>
+      ({ children }: { children?: ReactNode }) => {
+        const idx = paragraphIndexRef.current++
+        return <Tag data-paragraph-index={idx}>{children}</Tag>
+      }
+    return {
+      code({ className, children }: { className?: string; children?: ReactNode }) {
+        const lang = /language-(\w+)/.exec(className ?? '')?.[1]
+        if (lang === 'mermaid') {
+          return <MermaidBlock code={String(children).replace(/\n$/, '')} />
+        }
+        return <code className={className}>{children}</code>
+      },
+      p: makeBlockRenderer('p'),
+      h1: makeBlockRenderer('h1'),
+      h2: makeBlockRenderer('h2'),
+      h3: makeBlockRenderer('h3'),
+      h4: makeBlockRenderer('h4'),
+      h5: makeBlockRenderer('h5'),
+      h6: makeBlockRenderer('h6'),
+    }
+  }, [])
+
   if (loadError) {
     return (
       <div className="rendered-markdown-view">
@@ -203,16 +229,6 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
   }
 
   paragraphIndexRef.current = 0
-
-  const makeBlockRenderer = (Tag: keyof JSX.IntrinsicElements) =>
-    ({ children }: { children?: ReactNode }) => {
-      const idx = paragraphIndexRef.current++
-      return (
-        <Tag data-paragraph-index={idx}>
-          {injectHighlights(children ?? null, comments, idx, markRefs.current)}
-        </Tag>
-      )
-    }
 
   return (
     <div className="rendered-markdown-view" style={{ display: 'flex', gap: 0 }}>
@@ -238,69 +254,30 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
           />
         </div>
       )}
-      {markPopover && (() => {
-        const comment = comments.find((c) => c.id === markPopover.commentId)
-        if (!comment) return null
-        return (
-          <div
-            className="mark-popover"
-            style={{
-              position: 'fixed',
-              left: Math.min(markPopover.pos.x, window.innerWidth - 360),
-              top: markPopover.pos.y,
-              width: 340,
-              zIndex: 950,
-            }}
-          >
-            <CommentBubble comment={comment} onDelete={(cid) => { removeComment(cid); setMarkPopover(null) }} />
-          </div>
-        )
-      })()}
       <div
         className="markdown-body"
         ref={containerRef}
         style={{ flex: 1, minWidth: 0, padding: '24px' }}
-        onClick={(e) => {
-          const mark = (e.target as HTMLElement).closest('mark[data-anchor-id]')
-          if (!mark) return
-          e.stopPropagation()
-          const cid = mark.getAttribute('data-anchor-id')!
-          const rect = mark.getBoundingClientRect()
-          setMarkPopover((prev) => prev?.commentId === cid ? null : { commentId: cid, pos: { x: rect.left, y: rect.bottom + 8 } })
-        }}
+        onClick={handleBodyClick}
       >
-        <ReactMarkdown
-          key={comments.map(c => c.id).join(',')}
-          remarkPlugins={[remarkGfm, remarkBreaks]}
-          components={{
-            code({ className, children }) {
-              const lang = /language-(\w+)/.exec(className ?? '')?.[1]
-              if (lang === 'mermaid') {
-                return <MermaidBlock code={String(children).replace(/\n$/, '')} />
-              }
-              return <code className={className}>{children}</code>
-            },
-            p: makeBlockRenderer('p'),
-            h1: makeBlockRenderer('h1'),
-            h2: makeBlockRenderer('h2'),
-            h3: makeBlockRenderer('h3'),
-            h4: makeBlockRenderer('h4'),
-            h5: makeBlockRenderer('h5'),
-            h6: makeBlockRenderer('h6'),
-          }}
-        >
+        <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={markdownComponents}>
           {content}
         </ReactMarkdown>
       </div>
       <RenderedCommentMargin
         comments={comments}
+        activeCommentId={activeCommentId}
+        onActivate={handleCardActivate}
         onDelete={removeComment}
-        markRefs={markRefs.current}
+        ranges={rangesRef.current}
+        containerRef={containerRef}
+        content={content}
       />
     </div>
   )
 }
 
+/** Absolute character offset of (target, offset) within root's text content. */
 function getTextOffset(root: Node, target: Node, offset: number): number {
   let pos = 0
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -310,4 +287,107 @@ function getTextOffset(root: Node, target: Node, offset: number): number {
     pos += (node.textContent ?? '').length
   }
   return pos + offset
+}
+
+/** Maps an absolute character offset within root to a (text node, local offset) pair. */
+function nodeAtOffset(root: Node, offset: number): { node: Text; offset: number } | null {
+  let pos = 0
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    const len = node.textContent?.length ?? 0
+    if (offset <= pos + len) return { node, offset: offset - pos }
+    pos += len
+  }
+  return null
+}
+
+/** Collapses whitespace runs to single spaces, keeping a map from each
+ * normalized index back to its source-string index. */
+function collapseWhitespace(text: string): { norm: string; map: number[] } {
+  let norm = ''
+  const map: number[] = []
+  let inWs = false
+  for (let i = 0; i < text.length; i++) {
+    if (/\s/.test(text[i])) {
+      if (!inWs) {
+        norm += ' '
+        map.push(i)
+        inWs = true
+      }
+    } else {
+      norm += text[i]
+      map.push(i)
+      inWs = false
+    }
+  }
+  return { norm, map }
+}
+
+/** Locates a comment's selectedText in the container, returning [start, end]
+ * source offsets. Falls back to whitespace-insensitive matching because a
+ * selection spanning multiple blocks carries newlines that textContent lacks. */
+function locateSelectedText(fullText: string, selectedText: string): [number, number] | null {
+  const exact = fullText.indexOf(selectedText)
+  if (exact >= 0) return [exact, exact + selectedText.length]
+
+  const { norm, map } = collapseWhitespace(fullText)
+  const needle = selectedText.replace(/\s+/g, ' ').trim()
+  if (!needle) return null
+  const ni = norm.indexOf(needle)
+  if (ni < 0) return null
+  const start = map[ni]
+  const end = map[Math.min(ni + needle.length - 1, map.length - 1)] + 1
+  return [start, end]
+}
+
+/** Builds a DOM Range spanning a comment's selectedText, located by character offset. */
+function rangeForComment(container: HTMLElement, comment: ReviewComment): Range | null {
+  const selectedText = comment.renderedAnchor?.selectedText
+  if (!selectedText) return null
+  const located = locateSelectedText(container.textContent ?? '', selectedText)
+  if (!located) return null
+  const startPoint = nodeAtOffset(container, located[0])
+  const endPoint = nodeAtOffset(container, located[1])
+  if (!startPoint || !endPoint) return null
+  const range = document.createRange()
+  range.setStart(startPoint.node, startPoint.offset)
+  range.setEnd(endPoint.node, endPoint.offset)
+  return range
+}
+
+/** Computes a Range for every comment that resolves against the rendered text. */
+function buildCommentRanges(container: HTMLElement, comments: ReviewComment[]): Map<string, Range> {
+  const ranges = new Map<string, Range>()
+  for (const comment of comments) {
+    const range = rangeForComment(container, comment)
+    if (range) ranges.set(comment.id, range)
+  }
+  return ranges
+}
+
+/** Resolves a viewport click point to a (text node, offset) caret position. */
+function caretPointFromClick(x: number, y: number): { node: Node; offset: number } | null {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
+    caretRangeFromPoint?: (x: number, y: number) => Range | null
+  }
+  if (doc.caretPositionFromPoint) {
+    const pos = doc.caretPositionFromPoint(x, y)
+    return pos ? { node: pos.offsetNode, offset: pos.offset } : null
+  }
+  if (doc.caretRangeFromPoint) {
+    const range = doc.caretRangeFromPoint(x, y)
+    return range ? { node: range.startContainer, offset: range.startOffset } : null
+  }
+  return null
+}
+
+/** True when the caret (node, offset) falls within range's boundary points. comparePoint returns 0 only when the point is inside the range. */
+function isPointInRange(range: Range, node: Node, offset: number): boolean {
+  try {
+    return range.comparePoint(node, offset) === 0
+  } catch {
+    return false
+  }
 }

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { GitBranch, Settings } from 'lucide-react'
+import { GitBranch, Settings, Sun, Moon } from 'lucide-react'
 import type { DiffOptions } from '../hooks/useDiff'
+import type { Theme } from '../hooks/useTheme'
 
 interface ToolbarProps {
   repoName: string
@@ -15,6 +16,8 @@ interface ToolbarProps {
   softWrap: boolean
   browser?: string
   customMode: boolean
+  theme: Theme
+  onToggleTheme: () => void
   onDiffStyleChange: (style: 'split' | 'unified') => void
   onDiffOptionsChange: (options: DiffOptions) => void
   onDefaultTabSizeChange: (size: number) => void
@@ -36,6 +39,8 @@ export function Toolbar({
   softWrap,
   browser,
   customMode,
+  theme,
+  onToggleTheme,
   onDiffStyleChange,
   onDiffOptionsChange,
   onDefaultTabSizeChange,
@@ -96,6 +101,13 @@ export function Toolbar({
             Unified
           </button>
         </div>
+        <button
+          className="btn btn-sm theme-toggle-btn"
+          onClick={onToggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
         <div className="settings-wrapper" ref={settingsRef}>
           <button
             className={`btn btn-sm settings-btn ${settingsOpen ? 'btn-active' : ''}`}

@@ -7,6 +7,7 @@ import type { ReviewComment } from '../types'
 import { useDiff } from './hooks/useDiff'
 import { useComments } from './hooks/useComments'
 import { useSettings } from './hooks/useSettings'
+import { useTheme } from './hooks/useTheme'
 import { useViewed } from './hooks/useViewed'
 import { useFullDiffs, fileKey } from './hooks/useFullDiffs'
 import { Toolbar } from './components/Toolbar'
@@ -31,6 +32,7 @@ function useWindowSize({ factor }: { factor: number }) {
 
 export function App() {
   const { settings, loaded, updateSettings } = useSettings()
+  const { theme, toggleTheme } = useTheme()
   const { patch, repoName, branch, customMode, binaryFiles, tabSizeMap, untrackedFiles, loading, error } = useDiff({
     staged: settings.staged,
     untracked: settings.untracked,
@@ -196,6 +198,8 @@ export function App() {
         softWrap={settings.softWrap}
         browser={settings.browser}
         customMode={customMode}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onDiffStyleChange={(style) => updateSettings({ diffStyle: style })}
         onDiffOptionsChange={(options) => updateSettings(options)}
         onDefaultTabSizeChange={(size) => updateSettings({ defaultTabSize: size })}
@@ -229,6 +233,7 @@ export function App() {
           <Virtualizer className="main-scroll" contentClassName="main-content">
             <DiffViewer
               files={displayFiles}
+              theme={theme}
               diffStyle={settings.diffStyle}
               tabSizeMap={tabSizeMap}
               defaultTabSize={settings.defaultTabSize}

@@ -3,15 +3,24 @@ import { useState, useRef, useEffect } from 'react'
 interface CommentFormProps {
   onSubmit: (body: string) => void
   onCancel: () => void
+  header?: string
 }
 
-export function CommentForm({ onSubmit, onCancel }: CommentFormProps) {
+export function CommentForm({ onSubmit, onCancel, header }: CommentFormProps) {
   const [body, setBody] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     textareaRef.current?.focus()
   }, [])
+
+  /** Grows the textarea to fit its content, GitHub-style, up to the CSS max-height. */
+  const autoGrow = () => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }
 
   const handleSubmit = () => {
     const trimmed = body.trim()
@@ -32,10 +41,11 @@ export function CommentForm({ onSubmit, onCancel }: CommentFormProps) {
 
   return (
     <div className="comment-form">
+      {header && <div className="comment-form-header">{header}</div>}
       <textarea
         ref={textareaRef}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => { setBody(e.target.value); autoGrow() }}
         onKeyDown={handleKeyDown}
         placeholder="Leave a review comment..."
         rows={3}
