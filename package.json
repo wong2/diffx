@@ -30,6 +30,7 @@
     "changeset": "changeset",
     "dev:client": "vite",
     "dev:server": "tsx src/cli.ts --no-open -p 3433",
+    "test:e2e": "playwright test",
     "prepublishOnly": "pnpm run build",
     "release": "pnpm run build && changeset publish",
     "version-packages": "changeset version"
@@ -40,13 +41,18 @@
     "editorconfig": "^3.0.2",
     "get-port": "^7.2.0",
     "hono": "^4.7.6",
+    "mermaid": "^11.16.0",
     "open": "^11.0.0",
-    "react-resizable": "^4.0.1"
+    "react-markdown": "^10.1.0",
+    "react-resizable": "^4.0.1",
+    "remark-breaks": "^4.0.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@changesets/changelog-git": "^0.2.1",
     "@changesets/cli": "^2.30.0",
     "@pierre/diffs": "^1.2.9",
+    "@playwright/test": "^1.61.1",
     "@types/node": "^25.5.2",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",

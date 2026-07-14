@@ -7,6 +7,7 @@ import type { ReviewComment } from '../types'
 import { useDiff } from './hooks/useDiff'
 import { useComments } from './hooks/useComments'
 import { useSettings } from './hooks/useSettings'
+import { useTheme } from './hooks/useTheme'
 import { useViewed } from './hooks/useViewed'
 import { useFullDiffs, fileKey } from './hooks/useFullDiffs'
 import { Toolbar } from './components/Toolbar'
@@ -31,6 +32,7 @@ function useWindowSize({ factor }: { factor: number }) {
 
 export function App() {
   const { settings, loaded, updateSettings } = useSettings()
+  const { theme, toggleTheme } = useTheme()
   const { patch, repoName, branch, customMode, binaryFiles, tabSizeMap, untrackedFiles, loading, error } = useDiff({
     staged: settings.staged,
     untracked: settings.untracked,
@@ -120,18 +122,19 @@ export function App() {
   }, [comments])
 
   const fileAnnotationsMap = useMemo(() => {
-    const map = new Map<string, { side: ReviewComment['side']; lineNumber: number; metadata: ReviewComment }[]>()
+    const map = new Map<string, { side: 'deletions' | 'additions'; lineNumber: number; metadata: ReviewComment }[]>()
     for (const c of comments) {
+      // Rendered-view comments surface on their source line in the diff too.
+      const side: 'deletions' | 'additions' | undefined =
+        c.anchorType === 'rendered' ? 'additions' : c.side
+      const lineNumber = c.anchorType === 'rendered' ? c.renderedAnchor?.sourceLine : (c.endLineNumber ?? c.lineNumber)
+      if (lineNumber == null || !side) continue
       let list = map.get(c.filePath)
       if (!list) {
         list = []
         map.set(c.filePath, list)
       }
-      list.push({
-        side: c.side,
-        lineNumber: c.lineNumber,
-        metadata: c,
-      })
+      list.push({ side, lineNumber, metadata: c })
     }
     return map
   }, [comments])
@@ -195,6 +198,8 @@ export function App() {
         softWrap={settings.softWrap}
         browser={settings.browser}
         customMode={customMode}
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onDiffStyleChange={(style) => updateSettings({ diffStyle: style })}
         onDiffOptionsChange={(options) => updateSettings(options)}
         onDefaultTabSizeChange={(size) => updateSettings({ defaultTabSize: size })}
@@ -228,6 +233,7 @@ export function App() {
           <Virtualizer className="main-scroll" contentClassName="main-content">
             <DiffViewer
               files={displayFiles}
+              theme={theme}
               diffStyle={settings.diffStyle}
               tabSizeMap={tabSizeMap}
               defaultTabSize={settings.defaultTabSize}
