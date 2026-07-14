@@ -82,7 +82,7 @@ export function RenderedCommentMargin({
     <div
       className="comment-margin"
       ref={marginRef}
-      style={{ width: MARGIN_WIDTH, position: 'relative', flexShrink: 0 }}
+      style={{ width: comments.length > 0 ? MARGIN_WIDTH : 0, position: 'relative', flexShrink: 0 }}
     >
       {comments.map((comment, i) => {
         const pos = positions[i]
@@ -106,7 +106,7 @@ export function RenderedCommentMargin({
 /** True when two position lists have the same ids and tops (within 0.5px). */
 function samePositions(a: CardPos[], b: CardPos[]): boolean {
   if (a.length !== b.length) return false
-  return a.every((p, i) => p.id === b[i].id && Math.abs(p.top - b[i].top) < 0.5)
+  return a.every((p, i) => p.id === b[i].id && Math.abs(p.top - b[i].top) < 2)
 }
 
 /**

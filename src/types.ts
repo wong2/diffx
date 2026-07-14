@@ -10,6 +10,9 @@ export interface RenderedAnchor {
   paragraphIndex: number
   startOffset: number
   endOffset: number
+  /** 1-based line in the raw file the selection maps to, so the comment can
+   * also be shown on that line in the diff (raw) view. */
+  sourceLine?: number
 }
 
 export interface ReviewComment {

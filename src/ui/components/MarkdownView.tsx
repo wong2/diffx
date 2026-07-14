@@ -126,6 +126,8 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
     const contextStart = Math.max(0, startOffset - 50)
     const contextEnd = Math.min(fullText.length, endOffset + 50)
     const context = fullText.slice(contextStart, contextEnd)
+    // Raw-file line the selection maps to, so the diff view can show it too.
+    const sourceLine = content ? sourceLineOf(content, selectedText) : undefined
 
     // Find paragraph index from closest data-paragraph-index ancestor
     let el: Node | null = range.startContainer
@@ -134,6 +136,7 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
         return {
           selectedText,
           context,
+          sourceLine,
           paragraphIndex: parseInt(el.dataset.paragraphIndex, 10),
           startOffset: range.startOffset,
           endOffset: range.endOffset,
@@ -142,8 +145,8 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
       el = el.parentNode
     }
 
-    return { selectedText, context, paragraphIndex: 0, startOffset, endOffset }
-  }, [])
+    return { selectedText, context, sourceLine, paragraphIndex: 0, startOffset, endOffset }
+  }, [content])
 
   const handleTooltipClick = useCallback(() => {
     const anchor = captureAnchor()
@@ -275,6 +278,16 @@ export function MarkdownView({ filePath }: MarkdownViewProps) {
       />
     </div>
   )
+}
+
+/** 1-based line in the raw markdown where the selection's first line appears,
+ * or undefined when it can't be located (e.g. formatting split the text). */
+function sourceLineOf(content: string, selectedText: string): number | undefined {
+  const needle = selectedText.split('\n')[0].trim()
+  if (!needle) return undefined
+  const idx = content.indexOf(needle)
+  if (idx < 0) return undefined
+  return content.slice(0, idx).split('\n').length
 }
 
 /** Absolute character offset of (target, offset) within root's text content. */

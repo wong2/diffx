@@ -122,19 +122,19 @@ export function App() {
   }, [comments])
 
   const fileAnnotationsMap = useMemo(() => {
-    const map = new Map<string, { side: ReviewComment['side']; lineNumber: number; metadata: ReviewComment }[]>()
+    const map = new Map<string, { side: 'deletions' | 'additions'; lineNumber: number; metadata: ReviewComment }[]>()
     for (const c of comments) {
-      if (c.anchorType === 'rendered') continue
+      // Rendered-view comments surface on their source line in the diff too.
+      const side: 'deletions' | 'additions' | undefined =
+        c.anchorType === 'rendered' ? 'additions' : c.side
+      const lineNumber = c.anchorType === 'rendered' ? c.renderedAnchor?.sourceLine : (c.endLineNumber ?? c.lineNumber)
+      if (lineNumber == null || !side) continue
       let list = map.get(c.filePath)
       if (!list) {
         list = []
         map.set(c.filePath, list)
       }
-      list.push({
-        side: c.side,
-        lineNumber: c.lineNumber!,
-        metadata: c,
-      })
+      list.push({ side, lineNumber, metadata: c })
     }
     return map
   }, [comments])
