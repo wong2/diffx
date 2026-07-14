@@ -167,6 +167,7 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
   app.get('/api/file', async (c) => {
     const path = c.req.query('path')
     if (!path) return c.json({ error: 'Missing path' }, 400)
+    if (!path.endsWith('.md')) return c.json({ error: 'Forbidden' }, 403)
     if (!isSafePath(path, process.cwd())) return c.json({ error: 'Forbidden' }, 403)
     const fullPath = join(process.cwd(), path)
     try {

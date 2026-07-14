@@ -104,6 +104,8 @@ export function Toolbar({
         <button
           className="btn btn-sm theme-toggle-btn"
           onClick={onToggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-pressed={theme === 'dark'}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}

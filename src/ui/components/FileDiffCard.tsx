@@ -125,15 +125,25 @@ export const FileDiffCard = memo(function FileDiffCard({
         setDragRange({ start: startLine, end: ln, side }) // live range highlight
       }
     }
-    const onUp = () => {
+    const cleanup = () => {
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
+      document.removeEventListener('pointercancel', onCancel)
+    }
+    const onUp = () => {
+      cleanup()
       setDragRange(null)
       setDragStartBtnPos(null)
       setPending(normalizeRange({ start: startLine, end: endLine, side, endSide: side }))
     }
+    const onCancel = () => {
+      cleanup()
+      setDragRange(null)
+      setDragStartBtnPos(null)
+    }
     document.addEventListener('pointermove', onMove)
     document.addEventListener('pointerup', onUp)
+    document.addEventListener('pointercancel', onCancel)
   }
 
   const closeComposer = () => {
@@ -340,7 +350,15 @@ export const FileDiffCard = memo(function FileDiffCard({
             renderGutterUtility={(getHoveredLine) => (
               <button
                 className="gutter-add-btn"
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return
+                  e.preventDefault()
+                  const line = hoveredLineRef.current ?? getHoveredLine()
+                  if (!line) return
+                  setPending({ side: line.side, lineNumber: line.lineNumber, endLineNumber: line.lineNumber })
+                }}
                 onPointerDown={(e) => {
+                  if (e.button !== 0) return
                   const line = hoveredLineRef.current ?? getHoveredLine()
                   if (!line) return
                   // Stop the press from reaching the library's native line

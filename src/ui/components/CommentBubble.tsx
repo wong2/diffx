@@ -37,7 +37,9 @@ export function CommentBubble({ comment, onDelete }: CommentBubbleProps) {
         <div className="comment-resolved-summary">
           <CheckCircle2 size={14} className="comment-resolved-icon" />
           <span className="comment-resolved-label">Resolved</span>
-          <span className="comment-resolved-text">{comment.body}</span>
+          <span className="comment-resolved-text markdown-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{comment.body}</ReactMarkdown>
+          </span>
           <button className="comment-bubble-action" onClick={() => unresolveComment(comment.id)}>
             Unresolve
           </button>

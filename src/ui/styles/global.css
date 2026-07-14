@@ -42,6 +42,8 @@
     --comment-hl: rgba(255, 200, 60, 0.28);
     --comment-hl-active: rgba(255, 200, 60, 0.5);
     --comment-hl-active-bd: #e3a008;
+    --comment-card-border: #30363d;
+    --comment-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 body {
@@ -502,7 +504,6 @@ body {
     border-radius: 6px;
     background: var(--bg);
     color: var(--text);
-    resize: vertical;
     overflow-y: auto;
 }
 
@@ -566,7 +567,8 @@ body {
     transition: opacity 0.1s;
 }
 
-.comment-bubble:hover .comment-bubble-actions {
+.comment-bubble:hover .comment-bubble-actions,
+.comment-bubble-actions:focus-within {
     opacity: 1;
 }
 
