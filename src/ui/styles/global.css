@@ -391,6 +391,7 @@ body {
 }
 
 .file-diff-card {
+    position: relative; /* anchor for the drag-ghost + button overlay */
     border: 1px solid var(--border);
     border-radius: 6px;
     /* `clip` keeps the rounded-corner clipping without becoming a scroll

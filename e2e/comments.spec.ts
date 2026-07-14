@@ -36,6 +36,19 @@ async function revealAddButton(card: Locator, page: Page): Promise<Locator> {
 const MD_FILE = 'ARCHITECTURE.md'
 const mdCard = (page: Page) => page.locator(`[id="file-${MD_FILE}"]`)
 
+/** Scrolls the markdown card into view in diff mode, retrying until the
+ * virtualizer renders it. Returns the card locator. */
+async function scrollToMdCard(page: Page): Promise<Locator> {
+  await page.locator('.file-diff-card').first().waitFor()
+  const card = mdCard(page)
+  await expect(async () => {
+    await card.scrollIntoViewIfNeeded()
+    await page.waitForTimeout(300)
+    await expect(card).toBeVisible({ timeout: 1000 })
+  }).toPass({ timeout: 15000 })
+  return card
+}
+
 /** Scrolls the markdown card into view and switches it to Rendered mode.
  * Retries scroll+check because the virtualizer may not render the card's
  * header buttons immediately after the initial scroll. */
@@ -88,6 +101,32 @@ test.describe('diff line comments', () => {
     const header = card.locator('.comment-form-header')
     await expect(header).toBeVisible()
     await expect(header).toContainText(/lines\s+[LR]\d+\s+to\s+[LR]\d+/i)
+  })
+
+  test('ghost + button stays pinned to start line while dragging to end line', async ({ page }) => {
+    const card = await cardWithLines(page, 10)
+    const libraryBtn = card.locator('.gutter-add-btn:not(.gutter-add-btn-ghost)')
+    const endCell = card.locator('[data-column-number]').nth(10)
+
+    const addBtn = await revealAddButton(card, page)
+    const btnBox = await addBtn.boundingBox()
+    const endBox = await endCell.boundingBox()
+    if (!btnBox || !endBox) throw new Error('missing bounding boxes')
+
+    await page.mouse.move(btnBox.x + btnBox.width / 2, btnBox.y + btnBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(endBox.x + endBox.width / 2, endBox.y + endBox.height / 2, { steps: 10 })
+
+    // Ghost must appear and stay above the library button (which follows the cursor)
+    const ghost = card.locator('.gutter-add-btn-ghost')
+    await expect(ghost).toBeVisible({ timeout: 3000 })
+    const ghostBox = await ghost.boundingBox()
+    const liveBtnBox = await libraryBtn.boundingBox()
+    expect(ghostBox!.y).toBeLessThan(liveBtnBox!.y)
+
+    // Ghost disappears on release
+    await page.mouse.up()
+    await expect(ghost).not.toBeVisible()
   })
 
   test('a plain click on the + comments a single line', async ({ page }) => {
@@ -332,8 +371,7 @@ test.describe('cross-view comments', () => {
   test('a rendered-view comment also shows on its source line in the diff', async ({ page, request }) => {
     await seedCrossViewComment(request)
     await page.goto('/')
-    const card = mdCard(page)
-    await card.scrollIntoViewIfNeeded()
+    const card = await scrollToMdCard(page)
     const bubble = card.locator('.comment-bubble', { hasText: body })
     await bubble.scrollIntoViewIfNeeded()
     await expect(bubble).toBeVisible()
@@ -344,8 +382,7 @@ test.describe('cross-view comments', () => {
     await page.goto('/')
 
     // Diff view first.
-    const card = mdCard(page)
-    await card.scrollIntoViewIfNeeded()
+    const card = await scrollToMdCard(page)
     const bubble = card.locator('.comment-bubble', { hasText: body })
     await bubble.scrollIntoViewIfNeeded()
     await expect(bubble).toBeVisible()
@@ -371,8 +408,7 @@ test.describe('cross-view comments', () => {
 
     // After reload the diff view also has no bubble for it.
     await page.reload()
-    const reloaded = mdCard(page)
-    await reloaded.scrollIntoViewIfNeeded()
+    const reloaded = await scrollToMdCard(page)
     expect(await reloaded.locator('.comment-bubble', { hasText: body }).count()).toBe(0)
   })
 })

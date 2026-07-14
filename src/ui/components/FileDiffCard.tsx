@@ -85,6 +85,9 @@ export const FileDiffCard = memo(function FileDiffCard({
   // Active drag started by pressing and holding the gutter "+" button. Tracks
   // the hovered end line so the highlight follows the cursor across lines.
   const [dragRange, setDragRange] = useState<{ start: number; end: number; side: AnnotationSide } | null>(null)
+  // Card-relative position of the gutter "+" button when the drag started.
+  // Used to render a ghost button that stays pinned to the start line.
+  const [dragStartBtnPos, setDragStartBtnPos] = useState<{ top: number; left: number } | null>(null)
   const isMd = filePath.endsWith('.md')
   const [viewMode, setViewMode] = useState<'diff' | 'rendered'>('diff')
   // Line currently under the cursor, updated by the library's onLineEnter. This
@@ -99,8 +102,20 @@ export const FileDiffCard = memo(function FileDiffCard({
   // Press-and-hold the gutter "+" to drag across lines. Listeners are attached
   // synchronously here (not in an effect) so a fast click never races the
   // pointerup, and the composer opens only on release with the covered range.
-  const startPlusDrag = (startLine: number, side: AnnotationSide) => {
+  const startPlusDrag = (startLine: number, side: AnnotationSide, btnEl: HTMLElement) => {
     let endLine = startLine
+    // The button lives in the library's shadow DOM, so onPointerDown passes it
+    // to us directly rather than us querying for it. Anchor the ghost at the
+    // button center (it renders with transform: translate(-50%, -50%)).
+    const card = cardRef.current
+    if (card) {
+      const cardRect = card.getBoundingClientRect()
+      const btnRect = btnEl.getBoundingClientRect()
+      setDragStartBtnPos({
+        top: btnRect.top + btnRect.height / 2 - cardRect.top,
+        left: btnRect.left + btnRect.width / 2 - cardRect.left,
+      })
+    }
     setDragRange({ start: startLine, end: startLine, side })
     const onMove = (e: PointerEvent) => {
       const root = diffShadowRoot(cardRef.current)
@@ -114,6 +129,7 @@ export const FileDiffCard = memo(function FileDiffCard({
       document.removeEventListener('pointermove', onMove)
       document.removeEventListener('pointerup', onUp)
       setDragRange(null)
+      setDragStartBtnPos(null)
       setPending(normalizeRange({ start: startLine, end: endLine, side, endSide: side }))
     }
     document.addEventListener('pointermove', onMove)
@@ -184,6 +200,22 @@ export const FileDiffCard = memo(function FileDiffCard({
 
   return (
     <div ref={cardRef} className={`file-diff-card ${viewed ? 'file-diff-viewed' : ''}`} id={id}>
+      {dragStartBtnPos && (
+        <button
+          className="gutter-add-btn gutter-add-btn-ghost"
+          style={{
+            position: 'absolute',
+            top: dragStartBtnPos.top,
+            left: dragStartBtnPos.left,
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+            zIndex: 10,
+          }}
+          tabIndex={-1}
+        >
+          +
+        </button>
+      )}
       {viewed ? (
         <div className="file-diff-viewed-header">
           <span className="file-diff-viewed-name">{filePath}</span>
@@ -315,7 +347,7 @@ export const FileDiffCard = memo(function FileDiffCard({
                   // selection (which would open the composer immediately).
                   e.preventDefault()
                   e.stopPropagation()
-                  startPlusDrag(line.lineNumber, line.side)
+                  startPlusDrag(line.lineNumber, line.side, e.currentTarget)
                 }}
               >
                 +

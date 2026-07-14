@@ -1,6 +1,6 @@
 # Architecture Overview
 
-diffx is a local code review tool that runs a lightweight web server serving a React UI over your git working tree.
+diffx is a local code review tool that runs a lightweight Hono web server serving a React UI over your git working tree.
 
 ## Request Flow
 
@@ -33,3 +33,4 @@ There are two kinds of review comments:
 | `MermaidBlock` | Lazy-loaded Mermaid diagram renderer |
 | `RenderedCommentMargin` | Right-side margin with aligned comment bubbles |
 | `SelectionTooltip` | Floating `+` that appears on text selection |
+| `GhostPlusButton` | Ghost `+` pinned to the start line during a gutter drag |
