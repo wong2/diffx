@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs'
 import { resolve, isAbsolute, sep } from 'node:path'
 
 function decodeAndNormalize(p: string): string {
@@ -19,4 +20,24 @@ export function isSafePath(relativePath: string, baseDir: string): boolean {
   }
   const resolved = resolve(baseDir, normalized)
   return resolved.startsWith(resolve(baseDir) + sep) || resolved === resolve(baseDir)
+}
+
+// Symlink-aware containment: `isSafePath` compares lexically, so a link inside
+// baseDir still reads the file it points at. Returns the path to read, or null
+// when it escapes baseDir or does not exist.
+export function resolveWithinDir(relativePath: string, baseDir: string): string | null {
+  if (!isSafePath(relativePath, baseDir)) {
+    return null
+  }
+  const resolved = resolve(baseDir, relativePath)
+  try {
+    const realBase = realpathSync(baseDir)
+    const realTarget = realpathSync(resolved)
+    if (realTarget !== realBase && !realTarget.startsWith(realBase + sep)) {
+      return null
+    }
+    return resolved
+  } catch {
+    return null
+  }
 }
