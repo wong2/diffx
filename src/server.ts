@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join, extname, resolve } from 'node:path'
 import { Hono } from 'hono'
 import { serve } from '@hono/node-server'
-import { getGitDiff, getCustomGitDiff, getRepoName, getBranchName, getFileContent, getBlobContent, getWorktreeFileContent, isImageFile, getTabSizeForFiles, getUntrackedFilePaths } from './git.js'
+import { getGitDiff, getCustomGitDiff, getDiffFilePaths, getCustomDiffFilePaths, getRepoName, getBranchName, getFileContent, getBlobContent, getWorktreeFileContent, isImageFile, getTabSizeForFiles, getUntrackedFilePaths } from './git.js'
 import { loadSettings, saveSettings } from './settings.js'
 import { InMemoryCommentStore } from './comments.js'
 import type { CommentStore } from './comments.js'
@@ -90,21 +90,65 @@ function diffContainsFileVersion(patch: string, path: string, oldOid: string, ne
   return false
 }
 
-export function createApp(clientDir: string, customDiffArgs?: string[], commentStore?: CommentStore) {
+const LOOPBACK_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]'])
+
+// Normalizes IPv6 brackets and ports, and returns null for anything malformed.
+function hostnameOf(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    return new URL(url).hostname.toLowerCase() || null
+  } catch {
+    return null
+  }
+}
+
+export function createApp(
+  clientDir: string,
+  customDiffArgs?: string[],
+  commentStore?: CommentStore,
+  options: { restrictToLoopback?: boolean } = {},
+) {
   const app = new Hono()
   const isCustomMode = !!customDiffArgs
   const store = commentStore ?? new InMemoryCommentStore()
   const viewedFiles = new Map<string, string>()
+  const restrictToLoopback = options.restrictToLoopback ?? true
+
+  const patchUnderReview = (staged: boolean, untracked: boolean) =>
+    isCustomMode ? getCustomGitDiff(customDiffArgs) : getGitDiff({ staged, untracked })
+
+  // The client omits staged/untracked when loading file contents, so this is
+  // the widest set it could be displaying.
+  const filesUnderReview = () =>
+    isCustomMode
+      ? getCustomDiffFilePaths(customDiffArgs)
+      : getDiffFilePaths({ staged: true, untracked: true })
+
+  // Host rejects DNS rebinding; Origin rejects cross-site requests from a page
+  // the user has open. A missing Origin (curl, agent skills) is allowed — only
+  // browsers send it, and only browsers can be tricked into sending it. A
+  // non-loopback bind is an opt-in to LAN access, so Host is unchecked there.
+  app.use('/api/*', async (c, next) => {
+    const host = c.req.header('host')
+    const hostname = hostnameOf(host && `http://${host}`)
+    if (restrictToLoopback && (!hostname || !LOOPBACK_HOSTNAMES.has(hostname))) {
+      return c.json({ error: 'Forbidden' }, 403)
+    }
+    const origin = c.req.header('origin')
+    if (origin !== undefined) {
+      const originHostname = hostnameOf(origin)
+      const sameOrigin = originHostname !== null && originHostname === hostname
+      if (!originHostname || (!sameOrigin && !LOOPBACK_HOSTNAMES.has(originHostname))) {
+        return c.json({ error: 'Forbidden' }, 403)
+      }
+    }
+    await next()
+  })
 
   app.get('/api/diff', (c) => {
-    let patch: string
     const staged = c.req.query('staged') === 'true'
     const untracked = c.req.query('untracked') === 'true'
-    if (isCustomMode) {
-      patch = getCustomGitDiff(customDiffArgs)
-    } else {
-      patch = getGitDiff({ staged, untracked })
-    }
+    const patch = patchUnderReview(staged, untracked)
     const repoName = getRepoName()
     const branch = getBranchName()
     const untrackedFiles = untracked ? getUntrackedFilePaths() : []
@@ -120,6 +164,11 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
     const version = c.req.query('version') as 'old' | 'new'
     if (!path || !version) {
       return c.json({ error: 'Missing path or version' }, 400)
+    }
+    // Only files in the diff are served, so unrelated repository files (a
+    // gitignored .env) stay unreachable.
+    if (!filesUnderReview().includes(path)) {
+      return c.json({ error: 'File not in current diff' }, 404)
     }
     const content = getFileContent(path, version)
     if (!content) {
@@ -148,7 +197,7 @@ export function createApp(clientDir: string, customDiffArgs?: string[], commentS
     }
     const staged = c.req.query('staged') === 'true'
     const untracked = c.req.query('untracked') === 'true'
-    const patch = isCustomMode ? getCustomGitDiff(customDiffArgs) : getGitDiff({ staged, untracked })
+    const patch = patchUnderReview(staged, untracked)
     if (!diffContainsFileVersion(patch, path, oldOid, newOid)) {
       return c.json({ error: 'File version not in current diff' }, 404)
     }
@@ -274,7 +323,8 @@ export function startServer(options: {
   clientDir: string
   customDiffArgs?: string[]
 }): Promise<{ port: number }> {
-  const app = createApp(options.clientDir, options.customDiffArgs)
+  const restrictToLoopback = LOOPBACK_HOSTNAMES.has(options.host.toLowerCase())
+  const app = createApp(options.clientDir, options.customDiffArgs, undefined, { restrictToLoopback })
 
   return new Promise((resolve) => {
     const server = serve({

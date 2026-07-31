@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
 import { readFileSync, lstatSync, readlinkSync } from 'node:fs'
-import { isSafePath } from './path.js'
+import { isSafePath, resolveWithinDir } from './path.js'
 import { parseSync as parseEditorConfig, type ProcessedFileConfig } from 'editorconfig'
 
 const IMAGE_EXTENSIONS = new Set([
@@ -28,16 +28,21 @@ function isBinaryFile(absolutePath: string): boolean {
 
 export function getFileContent(filePath: string, version: 'old' | 'new'): Buffer | null {
   const root = getRepoRoot()
-  if (!isSafePath(filePath, root)) {
-    return null
-  }
-  const resolved = resolve(root, filePath)
   if (version === 'new') {
+    // Reading the worktree follows symlinks, unlike the git show below, which
+    // returns a link's target text rather than the file it points at.
+    const resolved = resolveWithinDir(filePath, root)
+    if (!resolved) {
+      return null
+    }
     try {
       return readFileSync(resolved)
     } catch {
       return null
     }
+  }
+  if (!isSafePath(filePath, root)) {
+    return null
   }
   // old version: try staged first, then HEAD
   try {
@@ -140,6 +145,32 @@ export function getGitDiff(options: { staged?: boolean; untracked?: boolean } = 
   return parts.join('\n')
 }
 
+function gitFileNames(args: string[]): string[] {
+  const output = execFileSync('git', ['diff', '--name-only', '-z', ...DIFF_FLAGS, ...args], {
+    encoding: 'utf-8',
+    maxBuffer: 50 * 1024 * 1024,
+  })
+  return output.split('\0').filter(Boolean)
+}
+
+// Paths in the diff, asked of git rather than parsed back out of the patch:
+// the `diff --git` header is ambiguous for paths containing ` b/`, and binary
+// files carry no `+++` header to read instead.
+export function getCustomDiffFilePaths(args: string[]): string[] {
+  return gitFileNames(args)
+}
+
+export function getDiffFilePaths(options: { staged?: boolean; untracked?: boolean } = {}): string[] {
+  const paths = new Set(gitFileNames([]))
+  if (options.staged) {
+    for (const path of gitFileNames(['--staged'])) paths.add(path)
+  }
+  if (options.untracked) {
+    for (const path of getUntrackedFilePaths()) paths.add(path)
+  }
+  return [...paths]
+}
+
 export function getTabSizeForFiles(filePaths: string[]): Record<string, number> {
   const root = getRepoRoot()
   const cache = new Map<string, ProcessedFileConfig>()
@@ -160,11 +191,13 @@ export function getTabSizeForFiles(filePaths: string[]): Record<string, number> 
 }
 
 export function getUntrackedFilePaths(): string[] {
-  const output = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
+  // -z so paths with newlines or non-ASCII survive intact; git quotes them
+  // otherwise, and a quoted path matches nothing.
+  const output = execFileSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
     encoding: 'utf-8',
     maxBuffer: 50 * 1024 * 1024,
-  }).trim()
-  return output ? output.split('\n') : []
+  })
+  return output.split('\0').filter(Boolean)
 }
 
 function getUntrackedFilesDiff(): string {
