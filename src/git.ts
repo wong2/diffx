@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { basename, join, resolve } from 'node:path'
 import { readFileSync, lstatSync, readlinkSync } from 'node:fs'
 import { isSafePath } from './path.js'
@@ -13,18 +13,6 @@ export function isImageFile(filePath: string): boolean {
   return IMAGE_EXTENSIONS.has(ext)
 }
 
-function isBinaryFile(absolutePath: string): boolean {
-  try {
-    const buffer = readFileSync(absolutePath)
-    const bytesToCheck = Math.min(buffer.length, 8192)
-    for (let i = 0; i < bytesToCheck; i++) {
-      if (buffer[i] === 0) return true
-    }
-    return false
-  } catch {
-    return true
-  }
-}
 
 export function getFileContent(filePath: string, version: 'old' | 'new'): Buffer | null {
   const root = getRepoRoot()
@@ -168,47 +156,25 @@ export function getUntrackedFilePaths(): string[] {
 }
 
 function getUntrackedFilesDiff(): string {
-  const root = getRepoRoot()
-  const output = execFileSync('git', ['ls-files', '--others', '--exclude-standard'], {
-    encoding: 'utf-8',
-    maxBuffer: 50 * 1024 * 1024,
-  }).trim()
-
-  if (!output) return ''
-
-  const files = output.split('\n')
   const patches: string[] = []
 
-  for (const file of files) {
-    const absolutePath = join(root, file)
-    if (isBinaryFile(absolutePath)) {
-      const patch = [
-        `diff --git a/${file} b/${file}`,
-        'new file mode 100644',
-        'index 0000000..0000001',
-        `Binary files /dev/null and b/${file} differ`,
-      ].join('\n')
-      patches.push(patch)
-    } else {
-      try {
-        const content = readFileSync(absolutePath, 'utf-8')
-        const lines = content.split('\n')
-        const diffLines = lines.map((l: string) => `+${l}`)
-        const patch = [
-          `diff --git a/${file} b/${file}`,
-          'new file mode 100644',
-          'index 0000000..0000001',
-          '--- /dev/null',
-          `+++ b/${file}`,
-          `@@ -0,0 +1,${lines.length} @@`,
-          ...diffLines,
-        ].join('\n')
-        patches.push(patch)
-      } catch {
-        // skip unreadable files
-      }
+  for (const file of getUntrackedFilePaths()) {
+    // Let Git determine file modes, attributes, and text/binary handling.
+    // --no-index reports differences with exit code 1, which is successful
+    // for this use case.
+    const result = spawnSync(
+      'git',
+      ['diff', ...DIFF_FLAGS, '--no-index', '--', '/dev/null', file],
+      { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 },
+    )
+
+    if (result.error) throw result.error
+    if (result.status !== 0 && result.status !== 1) {
+      const detail = result.stderr.trim()
+      throw new Error(`Failed to diff untracked file ${JSON.stringify(file)}${detail ? `: ${detail}` : ''}`)
     }
+    if (result.stdout) patches.push(result.stdout)
   }
 
-  return patches.length > 0 ? '\n' + patches.join('\n') : ''
+  return patches.join('')
 }
